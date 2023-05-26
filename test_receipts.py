@@ -31,7 +31,7 @@ def receipt_yeme():
     ("receipt_lidl2", 'lidl'),
     ("receipt_yeme", 'yeme')
 ])
-def test_correct_shop_lidl(receipt, expected, request):
+def test_correct_shop(receipt, expected, request):
     receipt = request.getfixturevalue(receipt)
     assert receipt.shop == expected
 
@@ -41,9 +41,19 @@ def test_correct_shop_lidl(receipt, expected, request):
     ("receipt_lidl2", 8.69),
     ("receipt_yeme", 7.77)
 ])
-def test_correct_total_lidl(receipt, expected, request):
+def test_correct_total(receipt, expected, request):
     receipt = request.getfixturevalue(receipt)
     assert receipt.total == expected
+
+
+@pytest.mark.parametrize("receipt,expected", [
+    ("receipt_lidl", "21-05-2023 16:43:23"),
+    ("receipt_lidl2", "23-05-2023 08:20:05"),
+    ("receipt_yeme", "22-05-2023 18:10:25")
+])
+def test_correct_date(receipt, expected, request):
+    receipt = request.getfixturevalue(receipt)
+    assert receipt.shopping_date == expected
 
 
 @pytest.mark.parametrize("receipt,correct_items", [
@@ -69,6 +79,6 @@ def test_correct_total_lidl(receipt, expected, request):
         {'name': 'BIO tela pre najmens', 'amount': 0.104, 'final_price': 4.15}
     ])
 ])
-def test_processes_all_groceries_lidl(receipt, correct_items, request):
+def test_processes_all_groceries(receipt, correct_items, request):
     receipt = request.getfixturevalue(receipt)
     assert all([item in receipt.grocery_list for item in correct_items])

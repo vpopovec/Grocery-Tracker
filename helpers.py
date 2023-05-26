@@ -1,8 +1,10 @@
 import re
 import traceback
+import pytz
+from datetime import datetime
 from unidecode import unidecode
 MINUS_SIGN = '[-~]'
-NUMBER = '\d+[.,]\s*\d{2}'
+NUMBER = r'\d+[.,]\s*\d{2}'
 
 
 def get_item_name(item_name):
@@ -20,11 +22,14 @@ def get_item_name(item_name):
 def fix_item_name(name):
     name = ' '.join(name.split())
     name = f"{name[:-1]}g" if name[-1] == '9' else name
-    name = name.replace(' .', '.').replace(' ,', ',').replace('m|', 'ml')
+
+    typos = [(' .', '.'), (' ,', '.'), (' ml', ' ml'), (' m1', ' ml'), (' m}', ' ml')]
+    name = name.replace(' .', '.').replace(' ,', ',').replace(' m|', ' ml').replace(' m1', ' ml')
+
     # Extra manual fixes
     name = name.replace('najmeng', 'najmens')
-
     name = re.sub(r'( \d+)\*', lambda pat: f"{pat.group(1)}%", name)
+    name = re.sub(r'( \d+[94])', lambda pat: f"{pat.group(1)[:-1]}g", name)  # g sometimes read as 9 or 4
     return name
 
 
@@ -75,21 +80,21 @@ def get_discount_from_item(item):
 
 
 def get_shop(receipt):
-    shops = {'yeme': ('yeme',), 'kaufland': ('kaufland',), 'lidl': ('lidl', 'lsdl', '2020279415', '35793783')}
+    shops = {
+        'yeme': ('yeme', '2024133650', '47793155'),
+        'kaufland': ('kaufland', '2020234216', '35790164'),
+        'lidl': ('lidl', 'lsdl', '2020279415', '35793783')}
     receipt_shop = ''
     for shop, shop_aliases in shops.items():
         for shop_alias in shop_aliases:
             receipt_shop = shop if shop_alias in receipt else receipt_shop
+            if receipt_shop:
+                break
+        if receipt_shop:
+            break
 
     # Try regex as well (experimental)
     receipt_shop = 'lidl' if re.search(r'lid[}]', receipt) else receipt_shop
-    # shop = 'yeme' if 'yeme' in receipt else ''
-    # shop = 'kaufland' if 'kaufland' in receipt else shop
-    # for lidl_sign in ['lidl', 'lsdl', '2020279415', '35793783']:
-    #     shop = 'lidl' if lidl_sign in receipt else shop
-    # shop = 'lidl' if 'lidl' in receipt else shop
-    # shop = 'lidl' if 'lsdl' in receipt else shop
-    # shop = 'lidl' if '2020279415' in receipt else shop
     return receipt_shop
 
 
@@ -97,10 +102,32 @@ def float_sk(num_str):
     return float(num_str.replace(',', '.'))
 
 
-def get_date_of_shopping(receipt):
-    if dt := re.search(r'\d{2}-\d{2}-\d{4}\s*\d{2}:\d{2}:\d{2}', receipt):  # Yeme, Lidl
-        return dt.group(0)
+def get_shopping_date(receipt):
+    if dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.:;](\d{2})[.:;](\d{2})', receipt):  # Yeme, Lidl
+        date = dt.group(1)
+        hour, minute, second = dt.group(2), dt.group(3), dt.group(4)
+        return f"{date} {':'.join([hour, minute, second])}"
 
 
 def fix_amount_int(amount):
     return int(amount.replace('i', '1').replace('{', '1'))
+
+
+def get_iso_from_slovak_dt_str(slovak_dt):
+    input_format = "%d-%m-%Y %H:%M:%S"
+    source_timezone = pytz.timezone("Europe/Bratislava")
+
+    # Parse the input string as a datetime object in the source timezone
+    source_datetime = datetime.strptime(slovak_dt, input_format)
+    source_datetime = source_timezone.localize(source_datetime)
+
+    # Convert the datetime to UTC
+    return source_datetime.astimezone(pytz.utc).isoformat()
+
+
+def get_phone_input():
+    while True:
+        phone = input("Please input last 3 digits of your phone number: ")
+        if phone.isdecimal():
+            return phone
+        print("Use only digits, try again.")

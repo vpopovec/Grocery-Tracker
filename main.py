@@ -1,30 +1,48 @@
 from helpers import *
+from db import Database
 import easyocr
-# f_name = 'lidl_ba1.jpg'
-f_name = 'lidl_bj1.jpeg'
+f_name = 'kaufland_ba2.jpg'
 
 
 def main():
-    print(f"READING {f_name=}")
-    receipt = Receipt(f_name)
-    items = receipt.preprocess_items()
-    receipt.process_grocery_list(items)
-    print(f"GROCERIES: total {receipt.total}")
-    for grocery_item in receipt.grocery_list:
-        print(grocery_item)
+    print("Welcome to Grocery Tracker")
+    db = Database()
+
+    phone = get_phone_input()
+    person_id, name = db.get_person_id_name(phone)
+    person = Person(person_id, name, phone)
+
+    for f_name in ['lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
+        print(f"READING {f_name=}")
+        receipt = Receipt(f_name)
+        items = receipt.preprocess_items()
+        receipt.process_grocery_list(items)
+        print(f"GROCERIES: total {receipt.total}")
+
+        db.save_receipt(receipt, person)
+
+
+class Person:
+    def __init__(self, person_id: int, name: str,  phone: str):
+        self.id = person_id
+        self.name = name
+        self.phone = phone
 
 
 class Receipt:
+    print(f"start loading Reader {datetime.now()}")
     reader = easyocr.Reader(['sk'], gpu=False)
-    
+    print(f"finished loading Reader {datetime.now()}")
+
     def __init__(self, f_name):
         self.f_name = f_name
         self.raw_items = Receipt.reader.readtext(f'receipts/{f_name}')  # run only once to load the model into memory
+        print(f"RAW ITEMS: {self.raw_items=}")
         self.receipt_text = ''.join([el[1].lower() for el in self.raw_items])
         self.shop = get_shop(self.receipt_text)
-        print(f"GOT SHOP: {self.shop=} FROM FUNC:{get_shop(self.receipt_text)}")
-        self.date_of_shopping = get_date_of_shopping(self.receipt_text)
-        print(f'DATE OF SHOPPING {self.date_of_shopping=}')
+        print(f"GOT SHOP: {self.shop=}")
+        self.shopping_date = get_shopping_date(self.receipt_text)
+        print(f'DATE OF SHOPPING {self.shopping_date=}')
         self.grocery_list = []
 
     @property
@@ -41,7 +59,8 @@ class Receipt:
             except ValueError:
                 traceback.print_exc()
                 start_idx = 0
-        print(f"RAW ITEMS: {self.raw_items[start_idx:]}")
+        print(f"{start_idx=}")
+
         # Iterate over items, group individual items together from ALPHAS to "\d [ABE]"
         for indx, raw_item in enumerate(self.raw_items[start_idx:]):
             i_pos, i_name, _ = raw_item
@@ -50,7 +69,8 @@ class Receipt:
             prev_item = self.raw_items[indx - 1] if indx else ('', '', '')
 
             # End of item info by receiving new item name
-            if item and items and is_item_name and not get_item_name(prev_item[1]):
+            # if item and items and is_item_name and not get_item_name(prev_item[1]):
+            if item and is_item_name and not get_item_name(prev_item[1]):
                 # TODO: ALSO END if previous raw_text for the item is something like k[g]\s*[0-9,]\s*
                 print(f"FINISHING ITEM 0: {item}")
                 items.append(item)
@@ -59,6 +79,7 @@ class Receipt:
             item.append(raw_item)
             item_text = ' '.join([i[1] for i in item])
             print(f"{item_text=}")
+            print(f'|||| {is_item_name=} and not {get_item_name(prev_item[1])}')
 
             # End of item info by getting the final price
             if i_name and re.search(r'\d [ABCE]', i_name[-3:]) or re.search(r'[0-9,]+\s*[ABCE]$', item_text):
@@ -104,7 +125,7 @@ class Receipt:
                     final_price = float_sk(re.search(r'\d+,\d+ (\d+,\d{2})', prices).group(1))  # first float is price per kg
                     self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
 
-                if self.shop == 'lidl' or not self.shop:
+                if self.shop in ['lidl', 'kaufland'] or not self.shop:
                     sub_price = get_sub_price(prices)
 
                     next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []

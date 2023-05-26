@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS receipt (
 	total real NOT NULL,
 	shopping_date date,
 	FOREIGN KEY (person_id) REFERENCES person (person_id)
---	PRIMARY KEY (receipt_id, person_id, shopping_date) not primary key but should be unq
+	UNIQUE(person_id, shopping_date) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
 );
 
 -- items table
@@ -25,3 +25,10 @@ CREATE TABLE IF NOT EXISTS person (
     phone text UNIQUE NOT NULL,
     name text NOT NULL
 );
+
+-- this deletes items only on explicit DELETE, not on REPLACE...
+CREATE TRIGGER IF NOT EXISTS remove_items AFTER DELETE ON receipt
+BEGIN
+  DELETE FROM item
+  WHERE receipt_id = OLD.receipt_id;
+END;
