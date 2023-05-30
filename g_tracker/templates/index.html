@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+
+{% block title %}
+
+{% endblock %}
+
+{% block main %}
+    <div class="mb-3">
+        <div class="mb-3" id="welcome-title">
+            Hello !
+        </div>
+        <div class="mb-3" id="welcome-section">
+            Welcome to Grocery Tracker where you can analyze your grocery receipts simply by uploading a picture.
+        </div>
+        <ul class="list-unstyled" id="welcome-list">
+            <li>Free</li>
+            <li>Easy to use</li>
+        </ul>
+
+        <a href="/scan">
+            <input class="btn btn-outline-secondary" name="get-started" type="submit" value="Get Started">
+        </a>
+    </div>
+{% endblock %}

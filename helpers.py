@@ -1,10 +1,14 @@
+import json
+import os
 import re
 import traceback
+import numpy as np
 import pytz
 from datetime import datetime
 from unidecode import unidecode
 MINUS_SIGN = '[-~]'
 NUMBER = r'\d+[.,]\s*\d{2}'
+CACHE_PATH = 'receipts/cache'
 
 
 def get_item_name(item_name):
@@ -24,21 +28,38 @@ def fix_item_name(name):
     name = f"{name[:-1]}g" if name[-1] == '9' else name
 
     typos = [(' .', '.'), (' ,', '.'), (' ml', ' ml'), (' m1', ' ml'), (' m}', ' ml')]
-    name = name.replace(' .', '.').replace(' ,', ',').replace(' m|', ' ml').replace(' m1', ' ml')
+    for typo in typos:
+        name = name.replace(typo[0], typo[1])
 
     # Extra manual fixes
     name = name.replace('najmeng', 'najmens')
+    name = re.sub(r'.apusta', 'kapusta', name)
+
     name = re.sub(r'( \d+)\*', lambda pat: f"{pat.group(1)}%", name)
     name = re.sub(r'( \d+[94])', lambda pat: f"{pat.group(1)[:-1]}g", name)  # g sometimes read as 9 or 4
     return name
 
 
-def get_sub_price(price):
+def get_sub_price(price, is_pcs=None):
     print(f"EXTRACTING SUBPRICE FROM {price=}")
+    if is_pcs:
+        # Second number (final_price) is optional, only present in multiple pcs
+        prices = re.search(r'(\d+)\D+(\d{2})(\s+\d+\D+\d{2})?', price)
+        if prices is not None:
+            # Return the price of 1 pc
+            return int(prices.group(1)) + int(prices.group(2)) / 100
+
+        # Missing a digit
+        if cents := re.search(r'\d{2}', price):
+            # Assume it was .cents
+            return round(int(cents.group(0)) / 100, 2)
+
     if price_amount := re.search(r'\d+,\d+', price):
+        # Not really sure about this one... For kgs?
         return round(float_sk(price_amount.group(0)), 2)
 
     if price_str := re.search(r'[^,.]+(\d+)\s+[.,]?(\d{2})\s*[BCE]', price):
+        # Return the price of all pcs (final_price)
         return int(price_str.group(1)) + int(price_str.group(2)) / 100
 
     if cents := re.search(r'\d{2}', price):
@@ -103,11 +124,16 @@ def float_sk(num_str):
 
 
 def get_shopping_date(receipt):
+    dt = ''
     if dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.:;](\d{2})[.:;](\d{2})', receipt):  # Yeme, Lidl
-        date = dt.group(1)
         hour, minute, second = dt.group(2), dt.group(3), dt.group(4)
-        return f"{date} {':'.join([hour, minute, second])}"
+    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.:;]..[.:;]..', receipt):  # Yeme, Lidl
+        hour, minute, second = dt.group(2), '00', '00'
+    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*..[.:;]..', receipt):  # Yeme, Lidl
+        hour, minute, second = '12', '00', '00'  # Placeholder time
 
+    if dt:
+        return f"{dt.group(1)} {':'.join([hour, minute, second])}"
 
 def fix_amount_int(amount):
     return int(amount.replace('i', '1').replace('{', '1'))
@@ -131,3 +157,54 @@ def get_phone_input():
         if phone.isdecimal():
             return phone
         print("Use only digits, try again.")
+
+
+def get_local_dt_from_iso(iso_dt):
+    target_tz = pytz.timezone("Europe/Bratislava")
+
+    # Parse ISO to UTC
+    utc_datetime = datetime.fromisoformat(iso_dt)
+
+    # Convert the datetime to the target timezone
+    return utc_datetime.astimezone(target_tz)
+
+
+def get_local_dt_formatted_from_iso(iso_dt, dt_format: str = ''):
+    slovak_format = '%d.%m.%Y'
+    dt_format = dt_format or slovak_format
+    return get_local_dt_from_iso(iso_dt).strftime(dt_format)
+
+
+def get_cached_receipt(f_name):
+    try:
+        with open(f'{CACHE_PATH}/{f_name.replace(".", "_")}.json', encoding='utf8') as rf:
+            return json.load(rf)
+    except (FileNotFoundError, json.decoder.JSONDecodeError):
+        return None
+
+
+class NpEncoder(json.JSONEncoder):
+    # Custom encoder for storing OCR result
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NpEncoder, self).default(obj)
+
+
+def cache_receipt(receipt, f_name, recursion=0):
+    # Cache result of OCR for faster loading (development/testing)
+    try:
+        print(f"CALLING CACHE_RECEIPT: {recursion=}")
+        with open(f'{CACHE_PATH}/{f_name.replace(".", "_")}.json', 'w', encoding='utf8') as wf:
+            # dumps is quicker than dump
+            wf.write(json.dumps(receipt, cls=NpEncoder))
+    except FileNotFoundError:
+        os.mkdir(CACHE_PATH)
+        # Avoid infinite loop when more dirs need to be created
+        if recursion < 3:
+            cache_receipt(receipt, f_name, recursion+1)
+

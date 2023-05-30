@@ -1,0 +1,92 @@
+
+/* Size for brand */
+nav .navbar-brand
+{
+    font-size: xx-large;
+}
+
+/* Colors for brand */
+nav .navbar-brand .blue
+{
+    color: #537fbe;
+}
+nav .navbar-brand .red
+{
+    color: #ea433b;
+}
+nav .navbar-brand .yellow
+{
+    color: #f5b82e;
+}
+nav .navbar-brand .green
+{
+    color: #2e944b;
+}
+
+.success {
+    color: green;
+}
+
+.fail {
+    color: red;
+}
+
+label#symbol {
+    padding-right: 5px;
+}
+
+input#deposit {
+    display: block;
+}
+
+#deposit-btn {
+    margin-left: 1rem;
+}
+
+#welcome-list {
+    /* font-size: larger; */
+    font-size: 1.1em;
+}
+
+#loader {
+    border: 16px solid #f3f3f3; 
+    border-top: 16px solid #ff6600; 
+    border-radius: 50%;
+    display: none;
+    width: 90px;
+    height: 90px;
+    animation: spin 2s linear infinite;
+    position: absolute;
+    left: calc(50% - 45px);
+    top: calc(50% - 45px);
+}
+  
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.field-icon {
+    float: right;
+    /* margin-left: -25px; */
+    padding: 3px;
+    margin-right: 10px;
+    margin-top: -28px;
+    position: relative;
+    z-index: 2;
+}
+
+input#upload-file-btn {
+    margin: 10px;
+}
+
+input#upload-file {
+    min-width: 250px;
+    max-width: 800px;
+    width: 50vw;
+    margin: auto;
+}
+
+div#welcome-title {
+
+}

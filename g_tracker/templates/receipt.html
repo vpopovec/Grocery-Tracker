@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+
+{% block title %}
+
+{% endblock %}
+
+{% block main %}
+    <div class="mb-3">
+        <div class="mb-3" id="welcome-title">
+            You can upload a file or take a picture of your receipt
+        </div>
+        <form method=post enctype=multipart/form-data>
+            <div class="mb-3">
+                <input id="upload-file" class="form-control" type=file name=file>
+                <input id="upload-file-btn" class="btn btn-outline-secondary" type=submit value=Upload>
+            </div>
+        </form>
+    </div>
+{% endblock %}
