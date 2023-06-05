@@ -8,7 +8,7 @@ from db import Database
 from person import Person
 import easyocr
 
-f_name = 'kaufland_bj.jpg'
+f_name = 'lidl_bj11.jpeg'
 db = Database()
 
 
@@ -18,20 +18,13 @@ def main():
     print("AUTO FILLING PHONE 000")
     person = Person('000')
 
-    for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
-        print(f"READING {f_name=}")
-        receipt = process_receipt_from_fpath(f_name)
-        receipt.user_edit()
-        print(f"GROCERIES: total {receipt.total}")
+    # for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
+    print(f"READING {f_name=}")
+    receipt = process_receipt_from_fpath(f_name)
+    receipt.user_edit()
+    print(f"GROCERIES: total {receipt.total}")
 
-        db.save_receipt(receipt, person)
-
-
-def process_receipt_from_fpath(f_name: str) -> object:
-    receipt = Receipt(f_name)
-    items = receipt.preprocess_items()
-    receipt.process_grocery_list(items)
-    return receipt
+    db.save_receipt(receipt, person)
 
 
 class Receipt:
@@ -192,6 +185,13 @@ class Receipt:
                 break
             else:
                 print(f"ERROR: {res_code=}")
+
+
+def process_receipt_from_fpath(f_name: str) -> Receipt:
+    receipt = Receipt(f_name)
+    items = receipt.preprocess_items()
+    receipt.process_grocery_list(items)
+    return receipt
 
 
 if __name__ == '__main__':

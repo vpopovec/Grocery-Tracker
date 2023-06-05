@@ -133,7 +133,7 @@ def get_shopping_date(receipt):
         hour, minute, second = dt.group(2), dt.group(3), dt.group(4)
     elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.,:;]..[.,:;]..', receipt):  # Yeme, Lidl
         hour, minute, second = dt.group(2), '00', '00'
-    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*..[.,:;]..', receipt):  # Yeme, Lidl
+    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*..?.?[.,:;]..', receipt):  # Yeme, Lidl
         hour, minute, second = '12', '00', '00'  # Placeholder time
 
     if dt:

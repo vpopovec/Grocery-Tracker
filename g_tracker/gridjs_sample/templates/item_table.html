@@ -19,9 +19,9 @@
     <script>
       new gridjs.Grid({
         columns: [
-          { id: 'person', name: 'Person' },
-          { id: 'shop', name: 'Shop' },
-          { id: 'total', name: 'Total', sort: {
+          { id: 'name', name: 'Person' },
+          { id: 'amount', name: 'Amount' },
+          { id: 'total', name: 'Total Price', sort: {
                           compare: (a, b) => {
                               if (parseFloat(a) > parseFloat(b)) {
                                   return 1;
@@ -32,16 +32,14 @@
                               }
                           },
                       },
-          },
-          { id: 'date', name: 'Shopping date', sort: true }
+          }
         ],
         data: [
-          {% for receipt, buyer in receipts_persons %}
+          {% for item in items %}
             {
-              person: '{{ buyer.name }}',
-              shop: '{{ receipt.shop_name }}',
-              total: '{{ receipt.total }}',
-              date: '{{ receipt.shopping_date }}'
+              name: '{{ item.name }}',
+              amount: '{{ item.amount }}',
+              total: '{{ item.price }}'
             },
           {% endfor %}
         ],

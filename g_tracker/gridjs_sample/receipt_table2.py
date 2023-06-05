@@ -1,11 +1,5 @@
-from flask import Flask, render_template
-from flask_sqlalchemy import SQLAlchemy
+from flask import render_template
 from modules import Receipt, Person, app, db
-# app = Flask(__name__)
-#
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///receipts.db'
-# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# db = SQLAlchemy(app)
 
 
 def get_receipts_with_person_name(db):
