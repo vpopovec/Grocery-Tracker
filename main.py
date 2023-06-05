@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tempfile
 import traceback
@@ -7,7 +8,7 @@ from db import Database
 from person import Person
 import easyocr
 
-f_name = 'lidl_bj7.jpg'
+f_name = 'kaufland_bj.jpg'
 db = Database()
 
 
@@ -17,15 +18,20 @@ def main():
     print("AUTO FILLING PHONE 000")
     person = Person('000')
 
-    # for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
-    print(f"READING {f_name=}")
+    for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
+        print(f"READING {f_name=}")
+        receipt = process_receipt_from_fpath(f_name)
+        receipt.user_edit()
+        print(f"GROCERIES: total {receipt.total}")
+
+        db.save_receipt(receipt, person)
+
+
+def process_receipt_from_fpath(f_name: str) -> object:
     receipt = Receipt(f_name)
     items = receipt.preprocess_items()
     receipt.process_grocery_list(items)
-    receipt.user_edit()
-    print(f"GROCERIES: total {receipt.total}")
-
-    db.save_receipt(receipt, person)
+    return receipt
 
 
 class Receipt:
@@ -74,11 +80,13 @@ class Receipt:
 
             item_text = ' '.join([i[1] for i in item])
             # TODO: ALSO END if previous raw_text for the item is something like k[g]\s*[0-9,]\s*
-            end_of_item = re.search(r' k[sg9] \d+(.\d{2})?', item_text, flags=re.I)  # re.escape was not working
+            end_of_item = re.search(r' k[sg9] \d+(.\d{2})?', item_text, re.I)  # re.escape was not working
+            end_of_discount = re.search(r'(z.ava|zaloha)( \d ks)?\s*[-~]?\d+[.,]\d+', item_text, re.I)
             print(f"{end_of_item=}", end=' >> ')
+            print(f"{end_of_discount=}", end=" >> ")
 
             # if item and is_item_name and (not get_item_name(prev_item[1]) or end_of_item):
-            if item and is_item_name and end_of_item:
+            if item and is_item_name and (end_of_item or end_of_discount):
                 print(f"FINISHING ITEM 0: {item}")
                 items.append(item)
                 item = []
@@ -86,14 +94,14 @@ class Receipt:
             item.append(raw_item)
             item_text = ' '.join([i[1] for i in item])
             # If item_text contains a known prefix (for items), empty item
-            if re.search(r'[cč].bloku. \d{4}', item_text, flags=re.I):
+            if re.search(r'[cč].bloku. \d+', item_text, re.I):
                 print("CLEARING ITEM")
                 item = []
             print(f"{item_text=}")
             print(f'|||| {is_item_name=} and not {get_item_name(prev_item[1])}')
 
             # End of item info by getting the final price
-            if i_name and re.search(r'\d [ABCE]', i_name[-3:]) or re.search(r'[0-9,]+\s*[ABCE]$', item_text):
+            if i_name and (re.search(r'\d [ABCE]', i_name[-3:], re.I) or re.search(r'[0-9,]+\s*[ABCE]$', item_text, re.I)):
                 if item:
                     print(f"FINISHING ITEM 1: {item}")
                     items.append(item)
@@ -146,6 +154,7 @@ class Receipt:
 
                     next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []
                     discount = get_discount_from_item(next_item)
+                    print(f"{amount=} {sub_price=} {discount=}")
                     final_price = round(amount * sub_price - discount, 2)
 
                     self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})

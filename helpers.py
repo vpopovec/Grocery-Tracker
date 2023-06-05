@@ -69,7 +69,7 @@ def get_sub_price(price, is_pcs=None):
 
 def is_discount(raw_text):
     raw_text = unidecode(raw_text.lower().replace(' "', ' -').replace(' ~', ' -'))
-    if re.search(r'z.ava', raw_text) or re.search(r'zaloh.?a', raw_text) or re.search(r'-\d', raw_text):
+    if re.search(r'z.ava', raw_text, re.I) or re.search(r'zaloh.?a', raw_text, re.I) or re.search(r'-\d', raw_text):
         return True
 
 
@@ -82,6 +82,7 @@ def get_discount_from_item(item):
         # Note: 'zaloha' should not be deducted from the item's price in the future
         raw_text = ' '.join([i[1] for i in item]).lower().replace(' "8', ' -0')
         raw_text = re.sub(r' "(\d)', lambda pat: f" -{pat.group(1)}", raw_text)
+        raw_text = re.sub(r'zlava . kup', 'zlava s kup', raw_text, re.I)  # zlava s kuponom, kaufland
         if not is_discount(raw_text):
             return 0
         # if not re.search(r'z.ava', raw_text) and not re.search(r'zaloh.?a', raw_text) and '-' not in raw_text:
@@ -91,7 +92,11 @@ def get_discount_from_item(item):
         except:
             print(f"CAN'T GET AMOUNT FROM {raw_text} defaulting to 1")
             amount = 1
-        discount_price = re.search(rf'{MINUS_SIGN}({NUMBER})', raw_text).group(1)
+        try:
+            discount_price = re.search(rf'{MINUS_SIGN}({NUMBER})', raw_text).group(1)
+        except AttributeError:  # no minus sign
+            discount_price = re.search(f'({NUMBER})', raw_text).group(1)
+
         discount_price = round(float_sk(''.join(discount_price.split())), 2)
         print(f"GOT DISCOUNT FROM {raw_text} {amount=} {discount_price=}")
         return round(amount * discount_price, 2)
@@ -124,16 +129,16 @@ def float_sk(num_str):
 
 
 def get_shopping_date(receipt):
-    dt = ''
-    if dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.:;](\d{2})[.:;](\d{2})', receipt):  # Yeme, Lidl
+    if dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.,:;](\d{2})[.,:;](\d{2})', receipt):  # Yeme, Lidl
         hour, minute, second = dt.group(2), dt.group(3), dt.group(4)
-    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.:;]..[.:;]..', receipt):  # Yeme, Lidl
+    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.,:;]..[.,:;]..', receipt):  # Yeme, Lidl
         hour, minute, second = dt.group(2), '00', '00'
-    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*..[.:;]..', receipt):  # Yeme, Lidl
+    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*..[.,:;]..', receipt):  # Yeme, Lidl
         hour, minute, second = '12', '00', '00'  # Placeholder time
 
     if dt:
         return f"{dt.group(1)} {':'.join([hour, minute, second])}"
+
 
 def fix_amount_int(amount):
     return int(amount.replace('i', '1').replace('{', '1'))
@@ -173,6 +178,10 @@ def get_local_dt_formatted_from_iso(iso_dt, dt_format: str = ''):
     slovak_format = '%d.%m.%Y'
     dt_format = dt_format or slovak_format
     return get_local_dt_from_iso(iso_dt).strftime(dt_format)
+
+
+def get_date_from_slovak_dt(shopping_date: str) -> str:
+    return '-'.join(shopping_date.split()[0].split('-')[::-1])
 
 
 def get_cached_receipt(f_name):

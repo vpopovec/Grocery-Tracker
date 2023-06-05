@@ -1,7 +1,8 @@
 import os
-import requests
+from g_tracker.helpers import ROOT_DIR
 from flask import Flask
 from flask_session import Session
+UPLOAD_FOLDER = f'{ROOT_DIR}/receipts'
 
 
 def create_app(test_config=None):
@@ -12,7 +13,7 @@ def create_app(test_config=None):
         DATABASE=os.path.join(app.instance_path, 'grocery_tracker.sqlite'),
         SESSION_PERMANENT=False,
         SESSION_TYPE='filesystem',
-        B_SESSION=requests.Session()
+        UPLOAD_FOLDER=UPLOAD_FOLDER
     )
     Session(app)
 

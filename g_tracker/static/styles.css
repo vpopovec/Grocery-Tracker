@@ -82,7 +82,7 @@ input#upload-file-btn {
 
 input#upload-file {
     min-width: 250px;
-    max-width: 800px;
+    max-width: 330px;
     width: 50vw;
     margin: auto;
 }
