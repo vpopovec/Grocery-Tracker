@@ -54,3 +54,12 @@ class Item(db.Model):
 
     def __repr__(self):
         return f"Item {self.name} amount {self.amount}, total of {self.price} EUR"
+
+    def to_dict(self):
+        return {
+            'id': self.item_id,
+            'price': self.price,
+            'amount': self.amount,
+            'name': self.name
+        }
+

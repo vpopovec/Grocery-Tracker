@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
   <head>
-    <title>Receipt Table</title>
+    <title>Item Table</title>
     <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
     <style>
       body {
@@ -11,44 +11,92 @@
   </head>
   <body>
     <div>
-      <h1>Receipt Table</h1>
+      <h1>Item Table</h1>
       <hr>
       <div id="table"></div>
     </div>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
     <script>
+      const tableDiv = document.getElementById('table');
+
+      const updateUrl = (prev, query) => {
+        return prev + (prev.indexOf('?') >= 0 ? '&' : '?') + new URLSearchParams(query).toString();
+      };
+
+      const editableCellAttributes = (data, row, col) => {
+          if (row) {
+            return {contentEditable: 'true', 'data-element-id': row.cells[0].data};
+          }
+          else {
+            return {};
+          }
+      };
+
       new gridjs.Grid({
         columns: [
-          { id: 'name', name: 'Person' },
-          { id: 'amount', name: 'Amount' },
-          { id: 'total', name: 'Total Price', sort: {
+          { id: 'id', 'hidden': true },
+          { id: 'name', name: 'Item', 'attributes': editableCellAttributes, 'sort': {
                           compare: (a, b) => {
-                              if (parseFloat(a) > parseFloat(b)) {
-                                  return 1;
-                              } else if (parseFloat(b) > parseFloat(a)) {
-                                  return -1;
-                              } else {
-                                  return 0;
-                              }
+                            return a.localeCompare(b);
+                          }
+            }
+          },
+          { id: 'amount', name: 'Amount', 'attributes': editableCellAttributes },
+          { id: 'price', name: 'Total Price', 'attributes': editableCellAttributes, sort: {
+                          compare: (a, b) => {
+                              return parseFloat(a) - parseFloat(b);
                           },
                       },
           }
         ],
-        data: [
-          {% for item in items %}
-            {
-              name: '{{ item.name }}',
-              amount: '{{ item.amount }}',
-              total: '{{ item.price }}'
-            },
-          {% endfor %}
-        ],
+        server: {
+          url: '/api/data',
+          then: results => results.data,
+          total: results => results.total,
+        },
         search: {
           selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
         },
         sort: true,
         pagination: true,
-      }).render(document.getElementById('table'));
+      }).render(tableDiv);
+
+      let savedValue;
+
+      tableDiv.addEventListener('focusin', ev => {
+        if (ev.target.tagName === 'TD') {
+          savedValue = ev.target.textContent;
+        }
+      });
+
+      tableDiv.addEventListener('focusout', ev => {
+        if (ev.target.tagName === 'TD') {
+          if (savedValue !== ev.target.textContent) {
+            fetch('/api/data', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                id: ev.target.dataset.elementId,
+                [ev.target.dataset.columnId]: ev.target.textContent
+              }),
+            });
+          }
+          savedValue = undefined;
+        }
+      });
+
+      tableDiv.addEventListener('keydown', ev => {
+        if (ev.target.tagName === 'TD') {
+          if (ev.key === 'Escape') {
+            ev.target.textContent = savedValue;
+            ev.target.blur();
+          }
+          else if (ev.key === 'Enter') {
+            ev.preventDefault();
+            ev.target.blur();
+          }
+        }
+      });
     </script>
   </body>
 </html>

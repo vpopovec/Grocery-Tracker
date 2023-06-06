@@ -138,9 +138,6 @@ class Receipt:
             i_name = fix_item_name(i_name)
 
             try:
-                # if self.shop == 'yeme':
-                #     final_price = float_sk(re.search(r'\d+,\d+ (\d+,\d{2})', prices).group(1))  # first float is price per kg
-                #     self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
 
                 if self.shop in ['lidl', 'kaufland', 'yeme'] or not self.shop:
                     sub_price = get_sub_price(prices, is_pcs)

@@ -37,7 +37,7 @@ def fix_item_name(name):
 
     name = re.sub(r'( \d+)\*', lambda pat: f"{pat.group(1)}%", name)
     name = re.sub(r'( \d+[94])', lambda pat: f"{pat.group(1)[:-1]}g", name)  # g sometimes read as 9 or 4
-    return name
+    return name.capitalize()
 
 
 def get_sub_price(price, is_pcs=None):
