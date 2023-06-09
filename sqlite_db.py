@@ -1,3 +1,4 @@
+import os.path
 import sqlite3
 from helpers import get_date_from_slovak_dt
 db_fp = 'receipts.db'
@@ -10,7 +11,8 @@ def load_db_schema(conn, schema_fp):
 
 
 class Database:
-    conn = sqlite3.connect(db_fp)
+    # Disable same check thread to allow usage across multiple requests
+    conn = sqlite3.connect(db_fp, check_same_thread=False)
     load_db_schema(conn, schema_fp)
 
     def __init__(self):
@@ -36,7 +38,7 @@ class Database:
 
         return person_id, name
 
-    def save_receipt(self, receipt, person):
+    def save_receipt(self, receipt, person) -> int:
         if not receipt.total or not receipt.grocery_list:
             raise ValueError('Receipt is empty')
 
@@ -58,5 +60,9 @@ class Database:
             item_task = (item['name'], item['final_price'], item['amount'], receipt_id)
             self.cur.execute(sql, item_task)
 
-        Database.conn.commit()
+        sql = ''' INSERT INTO scan(f_name, person_id, receipt_id) VALUES(?,?,?) '''
+        f_name = os.path.basename(receipt.f_name)
+        self.cur.execute(sql, (f_name, person.id, receipt_id))
 
+        Database.conn.commit()
+        return receipt_id

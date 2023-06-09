@@ -1,5 +1,5 @@
 from flask import render_template
-from modules import Receipt, Person, app, db
+from models import Receipt, Person, app, db
 
 
 def get_receipts_with_person_name(db):

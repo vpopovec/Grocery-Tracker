@@ -6,9 +6,10 @@ import numpy as np
 import pytz
 from datetime import datetime
 from unidecode import unidecode
+from g_tracker.helpers import ROOT_DIR
 MINUS_SIGN = '[-~]'
 NUMBER = r'\d+[.,]\s*\d{2}'
-CACHE_PATH = 'receipts/cache'
+CACHE_PATH = os.path.join(ROOT_DIR, 'receipts', 'cache')
 
 
 def get_item_name(item_name):
@@ -186,7 +187,8 @@ def get_date_from_slovak_dt(shopping_date: str) -> str:
 
 def get_cached_receipt(f_name):
     try:
-        with open(f'{CACHE_PATH}/{f_name.replace(".", "_")}.json', encoding='utf8') as rf:
+        f_name = os.path.basename(f_name).replace(".", "_") + '.json'
+        with open(os.path.join(CACHE_PATH, f_name), encoding='utf8') as rf:
             return json.load(rf)
     except (FileNotFoundError, json.decoder.JSONDecodeError):
         return None
@@ -208,7 +210,8 @@ def cache_receipt(receipt, f_name, recursion=0):
     # Cache result of OCR for faster loading (development/testing)
     try:
         print(f"CALLING CACHE_RECEIPT: {recursion=}")
-        with open(f'{CACHE_PATH}/{f_name.replace(".", "_")}.json', 'w', encoding='utf8') as wf:
+        f_name = os.path.basename(f_name).replace(".", "_") + '.json'
+        with open(os.path.join(CACHE_PATH, f_name), 'w', encoding='utf8') as wf:
             # dumps is quicker than dump
             wf.write(json.dumps(receipt, cls=NpEncoder))
     except FileNotFoundError:

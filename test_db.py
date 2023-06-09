@@ -1,6 +1,6 @@
 import pytest
 import sqlite3
-from db import Database
+from sqlite_db import Database
 
 
 def test_get_db_conn():

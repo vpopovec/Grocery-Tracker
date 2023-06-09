@@ -1,23 +1,49 @@
-from flask import render_template, request, abort
-from models import Receipt, Person, Item, db, app
+from flask import render_template, request, abort, current_app, Blueprint
 from sqlalchemy import select
+from g_tracker.models import Person, Receipt, Item, db
+# TODO: Try moving models imports here
+
+bp = Blueprint('item_table', __name__)
 
 
-@app.route('/items')
-def index():
-    with app.app_context():
-        # Pass in the f_path (receipt picture)
-        # Process the receipt
-
-        # query the Items
-        # items = Item.query.filter(Item.receipt_id == 2).all()
-        return render_template('item_table.html')
+def get_receipts_with_person_name():
+    return db.session.query(
+        Receipt, Person
+    ).filter(
+        Receipt.person_id == Person.person_id
+    ).all()
 
 
-@app.route('/api/data')
+@bp.route('/receipts')
+def receipts():
+    with current_app.app_context():
+        receipts_persons = get_receipts_with_person_name()
+        return render_template('receipt_table.html', receipts_persons=receipts_persons)
+
+
+@bp.route('/items')
+def items():
+    """
+    Displays editable table of items for the last receipt
+    :return:
+    """
+    receipt_id = request.args.get('receipt_id')
+    if receipt_id:
+        print(f"TYPE OF RECEIVED RECEIPT ID AS PARAMETER {type(receipt_id)} {receipt_id}")
+        current_app.config['RECEIPT_ID'] = int(receipt_id)
+    with current_app.app_context():
+        receipt_f_name = ''
+        return render_template('item_table.html', receipt_f_name=receipt_f_name)
+
+
+@bp.route('/api/data')
 def data():
-    # query = Item.query
-    query = Item.query.filter(Item.receipt_id == 2)
+    try:
+        # TODO: Use g instead of config?
+        current_receipt_id = current_app.config['RECEIPT_ID']
+    except KeyError:
+        current_receipt_id = 2
+    query = Item.query.filter(Item.receipt_id == current_receipt_id)
 
     # search filter
     search = request.args.get('search')
@@ -56,7 +82,7 @@ def data():
     }
 
 
-@app.route('/api/data', methods=['POST'])
+@bp.route('/api/data', methods=['POST'])
 def update():
     data = request.get_json()
     if 'id' not in data:
@@ -70,7 +96,3 @@ def update():
             setattr(item, field, data[field])
     db.session.commit()
     return '', 204
-
-
-if __name__ == '__main__':
-    app.run()

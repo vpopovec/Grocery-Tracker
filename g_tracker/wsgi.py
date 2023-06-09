@@ -1,5 +1,5 @@
 from g_tracker import create_app
-from g_tracker.db import init_db
+from g_tracker.deprecated_db import init_db
 from sqlite3 import OperationalError
 
 app = create_app()

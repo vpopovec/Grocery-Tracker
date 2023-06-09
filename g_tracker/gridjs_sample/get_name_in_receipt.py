@@ -1,4 +1,4 @@
-from modules import Receipt, Person, db, app
+from models import Receipt, Person, db, app
 
 with app.app_context():
     db.create_all()

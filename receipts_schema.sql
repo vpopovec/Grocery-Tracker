@@ -26,6 +26,16 @@ CREATE TABLE IF NOT EXISTS person (
     name text NOT NULL
 );
 
+-- scans table
+CREATE TABLE IF NOT EXISTS scan (
+    scan_id integer PRIMARY KEY,
+    f_name text NOT NULL UNIQUE,
+    person_id integer NOT NULL,
+    receipt_id integer NOT NULL,
+    FOREIGN KEY (person_id) REFERENCES person (person_id)
+    FOREIGN KEY (receipt_id) REFERENCES receipt (receipt_id)
+);
+
 -- this deletes items only on explicit DELETE, not on REPLACE...
 CREATE TRIGGER IF NOT EXISTS remove_items AFTER DELETE ON receipt
 BEGIN

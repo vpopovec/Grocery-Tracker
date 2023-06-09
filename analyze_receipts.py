@@ -1,5 +1,5 @@
 from person import Person
-from db import Database
+from sqlite_db import Database
 from helpers import *
 
 db = Database()

@@ -4,7 +4,7 @@ import tempfile
 import traceback
 
 from helpers import *
-from db import Database
+from sqlite_db import Database
 from person import Person
 import easyocr
 
@@ -34,7 +34,8 @@ class Receipt:
         self.f_name = f_name
         # Check if raw_items are stored in cache
         cached = get_cached_receipt(f_name)
-        self.raw_items = cached or Receipt.reader.readtext(f'receipts/{f_name}')
+        # self.raw_items = cached or Receipt.reader.readtext(f'receipts/{f_name}')
+        self.raw_items = cached or Receipt.reader.readtext(f_name)
         if not cached:
             cache_receipt(self.raw_items, f_name)
         print(f"RAW ITEMS: {self.raw_items=}")
@@ -189,6 +190,10 @@ def process_receipt_from_fpath(f_name: str) -> Receipt:
     items = receipt.preprocess_items()
     receipt.process_grocery_list(items)
     return receipt
+
+
+def save_receipt_to_db(receipt: Receipt, person: Person) -> int:
+    return db.save_receipt(receipt, person)
 
 
 if __name__ == '__main__':
