@@ -53,7 +53,7 @@
                       },
           },
           // Can't use url_for in javascript because of item_id reference
-          { id: 'delete', name: 'Delete', formatter: (item_id) =>
+          { id: 'delete_item', name: 'Delete', formatter: (item_id) =>
               gridjs.html(`<a href="/delete-row?item_id=${item_id}" }}><img src="/static/delete_icon.svg"/></a>`)}
         ],
         server: {
