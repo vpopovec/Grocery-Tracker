@@ -7,6 +7,10 @@
       body {
         font-family: Sans-Serif;
       }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
@@ -47,18 +51,22 @@
                               return parseFloat(a) - parseFloat(b);
                           },
                       },
-          }
+          },
+          // Can't use url_for in javascript because of item_id reference
+          { id: 'delete', name: 'Delete', formatter: (item_id) =>
+              gridjs.html(`<a href="/delete-row?item_id=${item_id}" }}><img src="/static/delete_icon.svg"/></a>`)}
         ],
         server: {
           url: '/api/data',
-          then: results => results.data,
+          then: results => results.data.map(item =>
+            [item.id, item.name, item.amount, item.price, item.id]),
           total: results => results.total,
         },
         search: {
           selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
         },
         sort: true,
-        pagination: true,
+        pagination: true
       }).render(tableDiv);
 
       let savedValue;
@@ -102,7 +110,20 @@
       <a href="{{ url_for('item_table.receipts') }}" style="color:inherit;text-decoration:none">See All Receipts</a>
     </button>
     <button>
-      <a>Receipt Picture</a>
+      <a href="{{ url_for('item_table.photo') }}" style="color:inherit;text-decoration:none" target="_blank">Receipt Picture</a>
     </button>
+    <button id="add-row-button">Add Row</button>
+    <script>
+      document.getElementById('add-row-button').onclick = function(){
+        var request = new XMLHttpRequest();
+
+        // We point the request at the appropriate command
+        request.open("GET", "/" + "add-row", true);
+        // and then we send it off
+        request.send();
+        // reload page to display new row
+        location.reload();
+      }
+    </script>
   </body>
 </html>

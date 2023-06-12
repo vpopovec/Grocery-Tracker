@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, flash, current_app, send_file
+from flask import Blueprint, request, redirect, url_for, flash, current_app
 from g_tracker.helpers import *
 from werkzeug.utils import secure_filename
 from person import Person
@@ -7,14 +7,6 @@ from uuid import uuid4
 
 bp = Blueprint('receipt', __name__)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
-
-@bp.route('/scan')
-def get_image():
-    if f_name := request.args.get('f_name'):
-        f_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f_name)
-        return send_file(f_path)
-    return "Sorry, no f_name specified in url"
 
 
 def allowed_file(filename):

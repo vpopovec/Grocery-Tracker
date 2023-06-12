@@ -7,6 +7,9 @@
       body {
         font-family: Sans-Serif;
       }
+      img.svg-icon {
+        width: 1.5rem;
+      }
     </style>
   </head>
   <body>
@@ -43,7 +46,7 @@
               shop: '{{ receipt.shop_name }}',
               total: '{{ receipt.total }}',
               date: '{{ receipt.shopping_date }}',
-              items: gridjs.html("<a href={{ url_for('item_table.items', receipt_id=receipt.receipt_id) }}>items</a>")
+              items: gridjs.html(`<a href={{ url_for('item_table.items', receipt_id=receipt.receipt_id) }}><img class="svg-icon" src="/static/receipt.svg"/></a>`)
             },
           {% endfor %}
         ],

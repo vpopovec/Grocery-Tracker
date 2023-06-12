@@ -1,7 +1,7 @@
-from flask import render_template, request, abort, current_app, Blueprint
-from sqlalchemy import select
-from g_tracker.models import Person, Receipt, Item, db
-# TODO: Try moving models imports here
+from flask import render_template, request, abort, current_app, Blueprint, send_file, url_for, redirect
+from sqlalchemy import select, func, insert, delete
+from g_tracker.models import Person, Receipt, Item, Scan, db
+import os
 
 bp = Blueprint('item_table', __name__)
 
@@ -21,6 +21,44 @@ def receipts():
         return render_template('receipt_table.html', receipts_persons=receipts_persons)
 
 
+@bp.route('/add-row')
+def add_row():
+    # Note: Page must be reloaded to reflect changes
+    print("~~~ ADDING EMPTY ROW ~~~")
+    db.session.execute(insert(Item).values(
+        price=0.0,
+        amount=1,
+        name="item",
+        receipt_id=current_app.config['RECEIPT_ID']
+    ))
+    db.session.commit()
+    return redirect(url_for('item_table.items'))
+
+
+@bp.route('/delete-row')
+def delete_row():
+    # TODO: Delete item
+    item_id = int(request.args.get('item_id'))
+    db.session.execute(delete(Item).where(Item.item_id == item_id))
+
+    update_receipt_total()
+    db.session.commit()
+
+    return redirect(url_for('item_table.items'))
+
+
+def update_receipt_total():
+    # Change receipt's total to reflect changes
+    current_receipt_id = current_app.config.get('RECEIPT_ID', 1)
+
+    receipt_total = round(db.session.query(
+        func.sum(Item.price)).join(Receipt) \
+        .filter(Receipt.receipt_id == current_receipt_id).scalar(), 2)
+
+    receipt = db.session.execute(select(Receipt).where(Receipt.receipt_id == current_receipt_id)).first()[0]
+    setattr(receipt, 'total', receipt_total)
+
+
 @bp.route('/items')
 def items():
     """
@@ -29,20 +67,15 @@ def items():
     """
     receipt_id = request.args.get('receipt_id')
     if receipt_id:
-        print(f"TYPE OF RECEIVED RECEIPT ID AS PARAMETER {type(receipt_id)} {receipt_id}")
         current_app.config['RECEIPT_ID'] = int(receipt_id)
     with current_app.app_context():
-        receipt_f_name = ''
-        return render_template('item_table.html', receipt_f_name=receipt_f_name)
+        return render_template('item_table.html')
 
 
 @bp.route('/api/data')
 def data():
-    try:
-        # TODO: Use g instead of config?
-        current_receipt_id = current_app.config['RECEIPT_ID']
-    except KeyError:
-        current_receipt_id = 2
+    current_receipt_id = current_app.config.get('RECEIPT_ID', 1)
+
     query = Item.query.filter(Item.receipt_id == current_receipt_id)
 
     # search filter
@@ -94,5 +127,23 @@ def update():
     for field in ['name', 'amount', 'total', 'price']:
         if field in data:
             setattr(item, field, data[field])
+
+    # Changing Item's price
+    if 'price' in data:
+        update_receipt_total()
+
     db.session.commit()
     return '', 204
+
+
+@bp.route('/photo')
+def photo():
+    if f_name := request.args.get('f_name'):
+        f_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f_name)
+        return send_file(f_path)
+
+    # Get photo for current receipt
+    current_receipt_id = current_app.config.get('RECEIPT_ID', 1)
+    scan = db.session.execute(select(Scan).where(Scan.receipt_id == current_receipt_id)).first()[0]
+    print('scan', scan)
+    return redirect(url_for('item_table.photo', f_name=scan.f_name))
