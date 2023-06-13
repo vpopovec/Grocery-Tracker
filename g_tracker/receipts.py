@@ -1,4 +1,5 @@
 from flask import Blueprint, request, redirect, url_for, flash, current_app
+from flask_login import login_required, current_user
 from g_tracker.helpers import *
 from werkzeug.utils import secure_filename
 from person import Person
@@ -15,16 +16,17 @@ def allowed_file(filename):
 
 
 def process_file(f_path):
-    # TODO: Get person's details (register to DB)
-    person = Person('000')
+    # person = Person('000')
+    person_id = int(current_user.get_id())
     receipt = process_receipt_from_fpath(f_path)
     # TODO: Save to db
-    receipt_id = save_receipt_to_db(receipt, person)
+    receipt_id = save_receipt_to_db(receipt, person_id)
     # TODO: Add manual check by client
     current_app.config['RECEIPT_ID'] = receipt_id
 
 
 @bp.route("/scan", methods=["GET", "POST"])
+@login_required
 def index():
     if request.method == "POST":
         # check if the post request has the file part

@@ -22,8 +22,10 @@ CREATE TABLE IF NOT EXISTS item (
 -- persons table
 CREATE TABLE IF NOT EXISTS person (
     person_id integer PRIMARY KEY,
-    phone text UNIQUE NOT NULL,
-    name text NOT NULL
+    email text UNIQUE NOT NULL,
+    username text UNIQUE NOT NULL,
+    name text NOT NULL,
+    password_hash text
 );
 
 -- scans table

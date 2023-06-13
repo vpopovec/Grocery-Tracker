@@ -1,9 +1,6 @@
-# from sqlalchemy import db.Column, db.Integer, db.Float, db.String, Date, db.ForeignKey, UniqueConstraint, db.Text
-# from sqlalchemy.orm import relationship
-
-# from g_tracker.deprecated_db import get_db
-# db = get_db()
-from g_tracker import db
+from g_tracker import db, login
+from flask_login import UserMixin
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 class Receipt(db.Model):
@@ -28,14 +25,30 @@ class Receipt(db.Model):
         return f"<Receipt {self.receipt_id} from {self.shop_name}, {self.shopping_date}>"
 
 
-class Person(db.Model):
+class Person(UserMixin, db.Model):
     __tablename__ = "person"
     person_id = db.Column(db.Integer, primary_key=True)
-    phone = db.Column(db.String, nullable=False, unique=True)
+    email = db.Column(db.String, nullable=False, unique=True)
+    username = db.Column(db.String, nullable=False)
     name = db.Column(db.String, nullable=False)
+    password_hash = db.Column(db.String(120))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def get_id(self):
+        return self.person_id
 
     def __repr__(self):
-        return f"<Person {self.name}, phone {self.phone}>"
+        return f"<Person {self.username}, nickname {self.name}>"
+
+
+@login.user_loader
+def load_user(person_id):
+    return Person.query.get(int(person_id))
 
 
 class Item(db.Model):
@@ -65,3 +78,5 @@ class Scan(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey("person.person_id"))
     receipt_id = db.Column(db.Integer, db.ForeignKey("receipt.receipt_id"))
 
+    def __repr__(self):
+        return f"<Scan {self.f_name}>"

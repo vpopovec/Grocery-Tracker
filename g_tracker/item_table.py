@@ -1,4 +1,5 @@
 from flask import render_template, request, abort, current_app, Blueprint, send_file, url_for, redirect
+from flask_login import login_required, current_user
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, Scan, db
 import os
@@ -7,14 +8,16 @@ bp = Blueprint('item_table', __name__)
 
 
 def get_receipts_with_person_name():
+    person_id = int(current_user.get_id())
     return db.session.query(
         Receipt, Person
     ).filter(
-        Receipt.person_id == Person.person_id
+        Receipt.person_id == person_id
     ).all()
 
 
 @bp.route('/receipts')
+@login_required
 def receipts():
     with current_app.app_context():
         receipts_persons = get_receipts_with_person_name()
@@ -22,9 +25,9 @@ def receipts():
 
 
 @bp.route('/add-row')
+@login_required
 def add_row():
     # Note: Page must be reloaded to reflect changes
-    print("~~~ ADDING EMPTY ROW ~~~")
     db.session.execute(insert(Item).values(
         price=0.0,
         amount=1,
@@ -36,8 +39,8 @@ def add_row():
 
 
 @bp.route('/delete-row')
+@login_required
 def delete_row():
-    # TODO: Delete item
     item_id = int(request.args.get('item_id'))
     db.session.execute(delete(Item).where(Item.item_id == item_id))
 
@@ -60,6 +63,7 @@ def update_receipt_total():
 
 
 @bp.route('/items')
+@login_required
 def items():
     """
     Displays editable table of items for the last receipt
@@ -73,6 +77,7 @@ def items():
 
 
 @bp.route('/api/data')
+@login_required
 def data():
     current_receipt_id = current_app.config.get('RECEIPT_ID', 1)
 
@@ -116,6 +121,7 @@ def data():
 
 
 @bp.route('/api/data', methods=['POST'])
+@login_required
 def update():
     data = request.get_json()
     if 'id' not in data:
@@ -137,7 +143,9 @@ def update():
 
 
 @bp.route('/photo')
+@login_required
 def photo():
+    # TODO: Only allow user to see his own photos
     if f_name := request.args.get('f_name'):
         f_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f_name)
         return send_file(f_path)

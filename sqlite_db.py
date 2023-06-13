@@ -19,16 +19,17 @@ class Database:
         # Unique cursor for every Database instance
         self.cur = Database.conn.cursor()
 
-    def get_person_id_name(self, phone: str):
-        # Get person by phone number
-        sql = ' SELECT person_id, name FROM person WHERE phone=? '
-        person_result = self.cur.execute(sql, [phone]).fetchone()
+    def get_person_id_name(self, email: str):
+        # Get person by email
+        sql = ' SELECT person_id, name FROM person WHERE email=? '
+        person_result = self.cur.execute(sql, [email]).fetchone()
 
         if person_result is None:
             # REGISTER NEW PERSON
-            name = input("You're new! Please type in your name: ")
-            insert_person_sql = " INSERT INTO person(phone, name) VALUES(?,?) "
-            self.cur.execute(insert_person_sql, [phone, name])
+            username = input("You're new! Please type in your username: ")
+            name = input("You're new! Please type in your nickname: ")
+            insert_person_sql = " INSERT INTO person(email, username, name) VALUES(?,?,?) "
+            self.cur.execute(insert_person_sql, [email, username, name])
             Database.conn.commit()
 
             person_id = self.cur.lastrowid
@@ -38,7 +39,7 @@ class Database:
 
         return person_id, name
 
-    def save_receipt(self, receipt, person) -> int:
+    def save_receipt(self, receipt, person_id) -> int:
         if not receipt.total or not receipt.grocery_list:
             raise ValueError('Receipt is empty')
 
@@ -46,7 +47,7 @@ class Database:
         sql = ''' INSERT INTO receipt(person_id, shop_name, total, shopping_date) VALUES(?,?,?,?) '''
         # receipt_task = (person.id, receipt.shop, receipt.total, get_iso_from_slovak_dt_str(receipt.shopping_date))
         date_iso = get_date_from_slovak_dt(receipt.shopping_date)
-        receipt_task = (person.id, receipt.shop, receipt.total, date_iso)
+        receipt_task = (person_id, receipt.shop, receipt.total, date_iso)
         self.cur.execute(sql, receipt_task)
         receipt_id = self.cur.lastrowid
 
@@ -62,7 +63,7 @@ class Database:
 
         sql = ''' INSERT INTO scan(f_name, person_id, receipt_id) VALUES(?,?,?) '''
         f_name = os.path.basename(receipt.f_name)
-        self.cur.execute(sql, (f_name, person.id, receipt_id))
+        self.cur.execute(sql, (f_name, person_id, receipt_id))
 
         Database.conn.commit()
         return receipt_id

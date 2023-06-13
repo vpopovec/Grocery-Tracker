@@ -90,3 +90,12 @@ input#upload-file {
 div#welcome-title {
 
 }
+
+img.svg-icon {
+    width: 1.5rem;
+}
+
+button a {
+    color: inherit;
+    text-decoration: none;
+}

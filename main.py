@@ -15,16 +15,16 @@ db = Database()
 def main():
     print("Welcome to Grocery Tracker")
 
-    print("AUTO FILLING PHONE 000")
-    person = Person('000')
+    print("AUTO FILLING email t@t.com")
+    person = Person('t@t.com')
 
-    # for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
-    print(f"READING {f_name=}")
-    receipt = process_receipt_from_fpath(f_name)
-    receipt.user_edit()
-    print(f"GROCERIES: total {receipt.total}")
+    for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
+        print(f"READING {f_name=}")
+        receipt = process_receipt_from_fpath(f_name)
+        receipt.user_edit()
+        print(f"GROCERIES: total {receipt.total}")
 
-    db.save_receipt(receipt, person)
+        db.save_receipt(receipt, person.id)
 
 
 class Receipt:
@@ -192,8 +192,8 @@ def process_receipt_from_fpath(f_name: str) -> Receipt:
     return receipt
 
 
-def save_receipt_to_db(receipt: Receipt, person: Person) -> int:
-    return db.save_receipt(receipt, person)
+def save_receipt_to_db(receipt: Receipt, person_id: int) -> int:
+    return db.save_receipt(receipt, person_id)
 
 
 if __name__ == '__main__':

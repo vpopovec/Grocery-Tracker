@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block title %}
+{% endblock %}
+
+{% block main %}
+    <h1>Register</h1>
+    <form action="" method="post">
+        {{ form.hidden_tag() }}
+        <p>
+            {{ form.username.label }}<br>
+            {{ form.username(size=32, class_="form-control mx-auto w-auto") }}<br>
+            {% for error in form.username.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ form.nickname.label }}<br>
+            {{ form.nickname(size=32, class_="form-control mx-auto w-auto") }}<br>
+            {% for error in form.nickname.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ form.email.label }}<br>
+            {{ form.email(size=64, class_="form-control mx-auto w-auto") }}<br>
+            {% for error in form.email.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ form.password.label }}<br>
+            {{ form.password(size=32, class_="form-control mx-auto w-auto") }}<br>
+            {% for error in form.password.errors %}
+            <span style="collor: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ form.password2.label }}<br>
+            {{ form.password2(size=32, class_="form-control mx-auto w-auto") }}<br>
+            {% for error in form.password2.errors %}
+            <span style="collor: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>{{ form.submit(class_="btn btn-outline-secondary") }}</p>
+    </form>
+{% endblock %}

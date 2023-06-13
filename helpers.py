@@ -157,12 +157,13 @@ def get_iso_from_slovak_dt_str(slovak_dt):
     return source_datetime.astimezone(pytz.utc).isoformat()
 
 
-def get_phone_input():
+def get_email_input():
     while True:
-        phone = input("Please input last 3 digits of your phone number: ")
-        if phone.isdecimal():
-            return phone
-        print("Use only digits, try again.")
+        email = input("Please input your email: ")
+        # TODO: Validate email
+        if '@' in email:
+            return email
+        print('Invalid email format')
 
 
 def get_local_dt_from_iso(iso_dt):
