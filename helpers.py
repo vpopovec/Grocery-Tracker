@@ -10,6 +10,9 @@ from g_tracker.helpers import ROOT_DIR
 MINUS_SIGN = '[-~]'
 NUMBER = r'\d+[.,]\s*\d{2}'
 CACHE_PATH = os.path.join(ROOT_DIR, 'receipts', 'cache')
+d_r = r'[0-3]\d'
+m_r = r'[01]\d'
+y_r = r'2\d\d\d'
 
 
 def get_item_name(item_name):
@@ -41,10 +44,16 @@ def fix_item_name(name):
     return name.capitalize()
 
 
-def get_sub_price(price, is_pcs=None):
+def get_sub_price(price, is_pcs=None, amount=0):
     print(f"EXTRACTING SUBPRICE FROM {price=}")
     if is_pcs:
         # Second number (final_price) is optional, only present in multiple pcs
+        if amount >= 1:
+            final_price_gr = re.search(r'(\d+)\D(\d{2}).?.?$', price)
+            if final_price_gr:
+                final_price = int(final_price_gr.group(1)) + int(final_price_gr.group(2)) / 100
+                return round(final_price / amount, 2)
+
         prices = re.search(r'(\d+)\D+(\d{2})(\s+\d+\D+\d{2})?', price)
         if prices is not None:
             # Return the price of 1 pc
@@ -55,12 +64,20 @@ def get_sub_price(price, is_pcs=None):
             # Assume it was .cents
             return round(int(cents.group(0)) / 100, 2)
 
+    elif not is_pcs:
+        prices = re.search(r'(\d+)\D+(\d{2})\D+(\d+)\D+(\d{2})', price)
+        if prices:
+            return int(prices.group(1)) + int(prices.group(2)) / 100
+
     if price_amount := re.search(r'\d+,\d+', price):
         # Not really sure about this one... For kgs?
         return round(float_sk(price_amount.group(0)), 2)
 
     if price_str := re.search(r'[^,.]+(\d+)\s+[.,]?(\d{2})\s*[BCE]', price):
         # Return the price of all pcs (final_price)
+        return int(price_str.group(1)) + int(price_str.group(2)) / 100
+
+    if price_str := re.search(r'(\d+)\s+[.,]?(\d{2})\s*', price):
         return int(price_str.group(1)) + int(price_str.group(2)) / 100
 
     if cents := re.search(r'\d{2}', price):
@@ -70,7 +87,11 @@ def get_sub_price(price, is_pcs=None):
 
 def is_discount(raw_text):
     raw_text = unidecode(raw_text.lower().replace(' "', ' -').replace(' ~', ' -'))
-    if re.search(r'z.ava', raw_text, re.I) or re.search(r'zaloh.?a', raw_text, re.I) or re.search(r'-\d', raw_text):
+    if re.search(r'z.ava', raw_text, re.I):
+        return True
+    if re.search(r'-\d', raw_text) and re.search(r'zaloh.?a', raw_text, re.I):
+        return True
+    if re.search(r'-\d', raw_text) and 'sucet' not in raw_text and 'uhradu' not in raw_text:  # end of items
         return True
 
 
@@ -96,7 +117,11 @@ def get_discount_from_item(item):
         try:
             discount_price = re.search(rf'{MINUS_SIGN}({NUMBER})', raw_text).group(1)
         except AttributeError:  # no minus sign
-            discount_price = re.search(f'({NUMBER})', raw_text).group(1)
+            try:
+                discount_price = re.search(f'({NUMBER})', raw_text).group(1)
+            except AttributeError:
+                prices = re.search(r'(\d+)\D+(\d{2})', raw_text)
+                discount_price = f'{prices.group(1)}.{prices.group(2)}'
 
         discount_price = round(float_sk(''.join(discount_price.split())), 2)
         print(f"GOT DISCOUNT FROM {raw_text} {amount=} {discount_price=}")
@@ -110,7 +135,10 @@ def get_shop(receipt):
     shops = {
         'yeme': ('yeme', '2024133650', '47793155'),
         'kaufland': ('kaufland', '2020234216', '35790164'),
-        'lidl': ('lidl', 'lsdl', '2020279415', '35793783')}
+        'lidl': ('lidl', 'lsdl', '2020279415', '35793783'),
+        'billa': ('billa', '2020312503', '31347037'),
+        'tesco': ('tesco', '2020301140', '31321828'),
+        'dm': {'dm ', '2020354534', '31393781'}}
     receipt_shop = ''
     for shop, shop_aliases in shops.items():
         for shop_alias in shop_aliases:
@@ -130,15 +158,25 @@ def float_sk(num_str):
 
 
 def get_shopping_date(receipt):
-    if dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.,:;](\d{2})[.,:;](\d{2})', receipt):  # Yeme, Lidl
-        hour, minute, second = dt.group(2), dt.group(3), dt.group(4)
-    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*(\d{2})[.,:;]..[.,:;]..', receipt):  # Yeme, Lidl
-        hour, minute, second = dt.group(2), '00', '00'
-    elif dt := re.search(r'(\d{2}-\d{2}-\d{4})\s*..?.?[.,:;]..', receipt):  # Yeme, Lidl
+    receipt = receipt.replace('ô', '6').replace('/2', '0')  # temp fix
+    if dt := re.search(rf'({d_r})-({m_r})-({y_r})\s*(\d\d)[.,:;](\d\d)[.,:;](\d\d)', receipt):
+        hour, minute, second = dt.group(4), dt.group(5), dt.group(6)
+    elif dt := re.search(rf'({d_r})-({m_r})-({y_r})\s*(\d\d)\D+(\d\d)\D+(\d\d)', receipt):
+        hour, minute, second = dt.group(4), dt.group(5), dt.group(6)
+    elif dt := re.search(rf'({d_r})-({m_r})-({y_r})\s*(\d\d)[.,:;]..[.,:;]..', receipt):
+        hour, minute, second = dt.group(4), '00', '00'
+    elif dt := re.search(rf'({d_r})\D?({m_r})\D?({y_r})\s*(\d\d)[.,:;](\d\d)[.,:;](\d\d)', receipt):
+        hour, minute, second = dt.group(4), dt.group(5), dt.group(6)
+    elif dt := re.search(rf'({d_r})\D?({m_r})\D?({y_r})\s*(\d\d)', receipt):
+        hour, minute, second = dt.group(4), '00', '00'
+    elif dt := re.search(rf'({d_r})-({m_r})-({y_r})\s*..?.?[.,:;]..', receipt):
+        hour, minute, second = '12', '00', '00'  # Placeholder time
+    elif dt := re.search(rf'({d_r})\D?({m_r})\D?({y_r})', receipt):
         hour, minute, second = '12', '00', '00'  # Placeholder time
 
     if dt:
-        return f"{dt.group(1)} {':'.join([hour, minute, second])}"
+        day, month, year = dt.group(1), dt.group(2), dt.group(3)
+        return f"{'-'.join([day, month, year])} {':'.join([hour, minute, second])}"
 
 
 def fix_amount_int(amount):
@@ -184,6 +222,11 @@ def get_local_dt_formatted_from_iso(iso_dt, dt_format: str = ''):
 
 def get_date_from_slovak_dt(shopping_date: str) -> str:
     return '-'.join(shopping_date.split()[0].split('-')[::-1])
+
+
+def get_datetime_from_slovak_dt(shopping_date: str) -> str:
+    time_ = shopping_date.split()[1]
+    return f"{get_date_from_slovak_dt(shopping_date)} {time_}"
 
 
 def get_cached_receipt(f_name):

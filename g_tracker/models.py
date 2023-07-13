@@ -9,7 +9,7 @@ class Receipt(db.Model):
     person_id = db.Column(db.Integer, db.ForeignKey("person.person_id"), nullable=False)
     shop_name = db.Column(db.Text, index=True)
     total = db.Column(db.Float, nullable=False)
-    shopping_date = db.Column(db.Date)
+    shopping_date = db.Column(db.DateTime)
     person = db.relationship("Person", backref="receipt")
     # Delete items on deletion of receipt (not on replace, leider)
     items = db.relationship("Item", backref="receipt", cascade="all, delete-orphan")

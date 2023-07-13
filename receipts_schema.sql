@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS receipt (
 	person_id integer NOT NULL,
 	shop_name text,
 	total real NOT NULL,
-	shopping_date date,
+	shopping_date datetime,
 	FOREIGN KEY (person_id) REFERENCES person (person_id)
-	UNIQUE(person_id, shopping_date) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
+	UNIQUE(person_id, shop_name, shopping_date) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
 );
 
 -- items table

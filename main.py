@@ -15,16 +15,18 @@ db = Database()
 def main():
     print("Welcome to Grocery Tracker")
 
-    print("AUTO FILLING email t@t.com")
-    person = Person('t@t.com')
+    # print("AUTO FILLING email tst@tst.com")
+    # person = Person('tst@tst.com')
 
-    for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
+    # for f_name in ['lidl_bj5.jpeg', 'lidl_ba1.jpg', 'lidl_bj4.jpeg', 'lidl_close.jpg', 'yeme2.jpg', 'yeme4.jpg']:
+    for f_name in ['77bd6009-cb1a-47a9-8ddc-dab657ad0e85.jpeg']:
         print(f"READING {f_name=}")
         receipt = process_receipt_from_fpath(f_name)
         receipt.user_edit()
         print(f"GROCERIES: total {receipt.total}")
 
-        db.save_receipt(receipt, person.id)
+        print("NOT SAVING TO DB !!!")
+        # db.save_receipt(receipt, person.id)
 
 
 class Receipt:
@@ -32,6 +34,7 @@ class Receipt:
 
     def __init__(self, f_name):
         self.f_name = f_name
+        print(f"Receipt.f_name = {f_name}")
         # Check if raw_items are stored in cache
         cached = get_cached_receipt(f_name)
         # self.raw_items = cached or Receipt.reader.readtext(f'receipts/{f_name}')
@@ -53,10 +56,12 @@ class Receipt:
     def preprocess_items(self):
         items, item = [], []
         start_idx = 0
+        found_items_start = False
         print(f"PREPROCESS ITEMS: {self.shop=}")
-        if self.shop == 'lidl' or not self.shop:
+        if self.shop == 'lidl':
             try:
                 start_idx = [it[1].strip() for it in self.raw_items].index('EUR') + 1
+                found_items_start = True
             except ValueError:
                 traceback.print_exc()
                 start_idx = 0
@@ -74,8 +79,8 @@ class Receipt:
 
             item_text = ' '.join([i[1] for i in item])
             # TODO: ALSO END if previous raw_text for the item is something like k[g]\s*[0-9,]\s*
-            end_of_item = re.search(r' k[sg9] \d+(.\d{2})?', item_text, re.I)  # re.escape was not working
-            end_of_discount = re.search(r'(z.ava|zaloha)( \d ks)?\s*[-~]?\d+[.,]\d+', item_text, re.I)
+            end_of_item = re.search(r' .?k[sg9ce] .?.?\d+(.\d{2})?', item_text, re.I)  # re.escape was not working
+            end_of_discount = re.search(r'(z.ava|zaloha).*(ks)?\s*[-~]?\d+[.,]\d+', item_text, re.I)
             print(f"{end_of_item=}", end=' >> ')
             print(f"{end_of_discount=}", end=" >> ")
 
@@ -87,9 +92,14 @@ class Receipt:
 
             item.append(raw_item)
             item_text = ' '.join([i[1] for i in item])
-            # If item_text contains a known prefix (for items), empty item
-            if re.search(r'[cč].bloku. \d+', item_text, re.I):
+
+            # If item_text contains a known prefix (for items) or 4-digit receipt number, empty item
+            if re.search(r'[cč]?.bl[oc]k.?.?.? .?\d+', item_text, re.I):
+                found_items_start = True
                 print("CLEARING ITEM")
+                item = []
+            elif re.search(r' \d{4} ', item_text) and not found_items_start:
+                print("CLEARING ITEM C.BLOCKU NOT FOUND")
                 item = []
             print(f"{item_text=}")
             print(f'|||| {is_item_name=} and not {get_item_name(prev_item[1])}')
@@ -110,8 +120,12 @@ class Receipt:
         for item_indx, item in enumerate(items):
             raw_text = ' '.join([i[1] for i in item])
             # Make Ks, KG etc. lowercase
-            raw_text = re.sub('( k[sg])', lambda pat: pat.group(1).lower(), raw_text, flags=re.I)
-            raw_text = re.sub('( k9)', ' kg', raw_text)
+            # Banany 1,316 Ka 1,69 2,22 B
+            raw_text = re.sub('( .?k[sg] )', lambda pat: ' ' + pat.group(1).lower()[-3:], raw_text, flags=re.I)
+            raw_text = re.sub('( .?k9 )', ' kg ', raw_text)
+            raw_text = re.sub(r'( .?ka )', ' kg ', raw_text, flags=re.I)
+            raw_text = re.sub(r'( .?kc )', ' kg ', raw_text, flags=re.I)
+            raw_text = re.sub('( .?ke )', ' ks ', raw_text)
 
             print(f"UNFILTERED: {raw_text}")
             if (' ks' not in raw_text and ' kg' not in raw_text) or is_discount(raw_text):
@@ -130,8 +144,16 @@ class Receipt:
                 amount = fix_amount_int(amount_raw) if amount_raw else 1  # Defaults to 1 if it can't find num
 
             elif is_kg:
-                amount_raw = re.search(r'(\d+,\d+)\s+kg', raw_text).group(1)
-                amount = float_sk(amount_raw)
+                try:
+                    amount_raw = re.search(r'(\d+\s?,\d+)\s+kg', raw_text).group(1)
+                    amount_stripped = "".join(amount_raw.split())
+                except AttributeError:
+                    # Try getting just decimal part and assume 0
+                    amount_raw = re.search(r'(\d+)\s+kg', raw_text).group(1)
+                    amount_stripped = f"0,{amount_raw}"
+
+                # Remove all whitespace
+                amount = float_sk(amount_stripped)
 
             split_parts = re.split(rf'{amount_raw}\s+k[gs]', raw_text)
             print(f"{split_parts=}")
@@ -140,15 +162,15 @@ class Receipt:
 
             try:
 
-                if self.shop in ['lidl', 'kaufland', 'yeme'] or not self.shop:
-                    sub_price = get_sub_price(prices, is_pcs)
+                # if self.shop in ['billa', 'lidl', 'kaufland', 'yeme'] or not self.shop:
+                sub_price = get_sub_price(prices, is_pcs, amount)
 
-                    next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []
-                    discount = get_discount_from_item(next_item)
-                    print(f"{amount=} {sub_price=} {discount=}")
-                    final_price = round(amount * sub_price - discount, 2)
+                next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []
+                discount = get_discount_from_item(next_item)
+                print(f"{amount=} {sub_price=} {discount=}")
+                final_price = round(amount * sub_price - discount, 2)
 
-                    self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
+                self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
 
             except Exception as e:
                 traceback.print_exc()

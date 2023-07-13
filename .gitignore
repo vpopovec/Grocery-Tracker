@@ -4,4 +4,5 @@ main (copy).py
 notes.txt
 check_easyocr.py
 receipts/other_shops
+receipts/mine
 flask_session/

@@ -7,12 +7,11 @@ import os
 bp = Blueprint('item_table', __name__)
 
 
-def get_receipts_with_person_name():
+def get_receipts():
     person_id = int(current_user.get_id())
-    return db.session.query(
-        Receipt, Person
-    ).filter(
-        Receipt.person_id == person_id
+    return db.session.execute(
+        select(Receipt, Person).join(Person).where(Receipt.person_id == person_id) \
+        .order_by(Receipt.receipt_id.desc())  # Show recently added receipts on top
     ).all()
 
 
@@ -20,7 +19,9 @@ def get_receipts_with_person_name():
 @login_required
 def receipts():
     with current_app.app_context():
-        receipts_persons = get_receipts_with_person_name()
+        receipts_persons = get_receipts()
+        for row in receipts_persons:
+            print(f'ROW: {row._fields} {row.keys()}')
         return render_template('receipt_table.html', receipts_persons=receipts_persons)
 
 
@@ -56,7 +57,7 @@ def update_receipt_total():
 
     receipt_total = round(db.session.query(
         func.sum(Item.price)).join(Receipt) \
-        .filter(Receipt.receipt_id == current_receipt_id).scalar(), 2)
+                          .filter(Receipt.receipt_id == current_receipt_id).scalar(), 2)
 
     receipt = db.session.execute(select(Receipt).where(Receipt.receipt_id == current_receipt_id)).first()[0]
     setattr(receipt, 'total', receipt_total)
@@ -152,6 +153,7 @@ def photo():
 
     # Get photo for current receipt
     current_receipt_id = current_app.config.get('RECEIPT_ID', 1)
-    scan = db.session.execute(select(Scan).where(Scan.receipt_id == current_receipt_id)).first()[0]
+    scan = db.session.execute(select(Scan).where(Scan.receipt_id == current_receipt_id)
+                              .order_by(Scan.scan_id.desc())).first()[0]  # Order bcs of multiple scans with the same receipt_id
     print('scan', scan)
     return redirect(url_for('item_table.photo', f_name=scan.f_name))

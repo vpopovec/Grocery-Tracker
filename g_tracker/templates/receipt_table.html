@@ -37,7 +37,7 @@
             person: '{{ buyer.name }}',
             shop: '{{ receipt.shop_name }}',
             total: '{{ receipt.total }}',
-            date: '{{ receipt.shopping_date }}',
+            date: '{{ receipt.shopping_date.strftime('%d.%m.%Y') }}',
             items: gridjs.html(`<a href={{ url_for('item_table.items', receipt_id=receipt.receipt_id) }}><img class="svg-icon" src="/static/receipt.svg"/></a>`)
           },
         {% endfor %}

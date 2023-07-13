@@ -2,12 +2,11 @@ from flask import Blueprint, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 from g_tracker.helpers import *
 from werkzeug.utils import secure_filename
-from person import Person
 from main import process_receipt_from_fpath, save_receipt_to_db
 from uuid import uuid4
 
 bp = Blueprint('receipt', __name__)
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}  # HEIC files aren't supported yet
 
 
 def allowed_file(filename):
@@ -16,7 +15,6 @@ def allowed_file(filename):
 
 
 def process_file(f_path):
-    # person = Person('000')
     person_id = int(current_user.get_id())
     receipt = process_receipt_from_fpath(f_path)
     # TODO: Save to db
@@ -39,9 +37,14 @@ def index():
         if file.filename == '':
             flash('No selected file')
             return redirect(request.url)
+        elif not allowed_file(file.filename):
+            flash(f'File type not allowed, please use: {", ".join(ALLOWED_EXTENSIONS)}')
+            return redirect(request.url)
+
         if file and allowed_file(file.filename):
             file_ext = secure_filename(file.filename).split('.')[-1]
             filename = f"{uuid4()}.{file_ext}"
+            print(f'saving {filename=}')
             # TODO: Save filename to DB (person can later view/delete their scanned receipts)
             # TODO: Save cached json instead of the file
             f_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
