@@ -148,9 +148,12 @@ class Receipt:
                     amount_raw = re.search(r'(\d+\s?,\d+)\s+kg', raw_text).group(1)
                     amount_stripped = "".join(amount_raw.split())
                 except AttributeError:
-                    # Try getting just decimal part and assume 0
-                    amount_raw = re.search(r'(\d+)\s+kg', raw_text).group(1)
-                    amount_stripped = f"0,{amount_raw}"
+                    try:
+                        # Try getting just decimal part and assume 0
+                        amount_raw = re.search(r'(\d+)\s+kg', raw_text).group(1)
+                        amount_stripped = f"0,{amount_raw}"
+                    except AttributeError:
+                        amount_stripped = '1,0'
 
                 # Remove all whitespace
                 amount = float_sk(amount_stripped)
@@ -168,6 +171,8 @@ class Receipt:
                 next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []
                 discount = get_discount_from_item(next_item)
                 print(f"{amount=} {sub_price=} {discount=}")
+                if discount > amount * sub_price:
+                    discount = 0
                 final_price = round(amount * sub_price - discount, 2)
 
                 self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})

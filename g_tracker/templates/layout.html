@@ -43,7 +43,11 @@
                 </button>
                 <div class="collapse navbar-collapse" id="navbar">
                     <ul class="navbar-nav ms-auto mt-2">
+                        {% if current_user.is_anonymous %}
                         <li class="nav-item"><a class="nav-link" href="/">About</a></li>
+                        {% else %}
+                        <li class="nav-item"><a class="nav-link" href="/scan">Upload</a></li>
+                        {% endif %}
                         {% if current_user.is_authenticated %}
                         <li class="nav-item"><a class="nav-link" href="/receipts">Receipts</a></li>
                         {% endif %}

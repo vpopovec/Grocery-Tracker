@@ -36,7 +36,7 @@
             }
           },
           { id: 'amount', name: 'Amount', 'attributes': editableCellAttributes },
-          { id: 'price', name: 'Total Price', 'attributes': editableCellAttributes, sort: {
+          { id: 'price', name: 'Price', 'attributes': editableCellAttributes, sort: {
                           compare: (a, b) => {
                               return parseFloat(a) - parseFloat(b);
                           },
@@ -51,6 +51,7 @@
           then: results => results.data.map(item =>
             [item.id, item.name, item.amount, item.price, item.id]),
           total: results => results.total,
+          total_price: results => results.total_price
         },
         search: {
           enabled: true,
@@ -108,9 +109,9 @@
         }
       });
     </script>
-    <a class="btn btn-outline-secondary me-1" href="{{ url_for('item_table.receipts') }}">See All Receipts</a>
-    <a class="btn btn-outline-secondary me-1" href="{{ url_for('item_table.photo') }}" target="_blank">Receipt Picture</a>
-    <button class="btn btn-outline-secondary me-1" id="add-row-button">Add Row</button>
+    <a class="btn btn-outline-secondary m-3" href="{{ url_for('item_table.receipts') }}">See All Receipts</a>
+    <a class="btn btn-outline-secondary m-3" href="{{ url_for('item_table.photo') }}" target="_blank">Receipt Picture</a>
+    <button class="btn btn-outline-secondary m-3" id="add-row-button">Add Row</button>
     <script>
       document.getElementById('add-row-button').onclick = function(){
         var request = new XMLHttpRequest();
@@ -123,5 +124,6 @@
         location.reload();
       }
     </script>
+    <div class="total-price mx-auto p-3">Total paid: {{receipt_total}}</div>
 
 {% endblock %}

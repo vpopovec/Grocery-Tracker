@@ -157,6 +157,15 @@ def float_sk(num_str):
     return float(num_str.replace(',', '.'))
 
 
+def valid_date_str(dt_str):
+    try:
+        datetime_object = datetime.strptime(dt_str, '%m-%d-%y %H:%M:%S')
+        print(datetime_object)
+        return True
+    except:
+        return False
+
+
 def get_shopping_date(receipt):
     receipt = receipt.replace('ô', '6').replace('/2', '0')  # temp fix
     if dt := re.search(rf'({d_r})-({m_r})-({y_r})\s*(\d\d)[.,:;](\d\d)[.,:;](\d\d)', receipt):
@@ -176,7 +185,13 @@ def get_shopping_date(receipt):
 
     if dt:
         day, month, year = dt.group(1), dt.group(2), dt.group(3)
-        return f"{'-'.join([day, month, year])} {':'.join([hour, minute, second])}"
+        dt_str = f"{'-'.join([day, month, year])} {':'.join([hour, minute, second])}"
+
+    try:
+        if get_iso_from_slovak_dt_str(dt_str):
+            return dt_str
+    except (ValueError, NameError):
+        return datetime.today().strftime("%d-%m-%Y %H:%M:%S")
 
 
 def fix_amount_int(amount):

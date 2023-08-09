@@ -73,8 +73,17 @@ def items():
     receipt_id = request.args.get('receipt_id')
     if receipt_id:
         current_app.config['RECEIPT_ID'] = int(receipt_id)
+
+    try:
+        receipt_id = current_app.config.get('RECEIPT_ID', 1)
+        receipt_total = db.session.execute(select(Receipt).where(Receipt.receipt_id == receipt_id)) \
+                                            .first()[0].total
+        print(f"RECEIPT TOTAL {receipt_total}")
+    except:
+        receipt_total = 0
+
     with current_app.app_context():
-        return render_template('item_table.html')
+        return render_template('item_table.html', receipt_total=receipt_total)
 
 
 @bp.route('/api/data')
@@ -118,6 +127,7 @@ def data():
     return {
         'data': [item.to_dict() for item in query],
         'total': total,
+        'total_price': 100
     }
 
 
