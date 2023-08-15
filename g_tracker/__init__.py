@@ -22,11 +22,12 @@ def create_app(config_class=Config):
     def hello():
         return 'Hello, World!'
 
-    from . import welcome, receipts, item_table, auth_routes
+    from . import welcome, receipts, item_table, auth_routes, insight
     app.register_blueprint(receipts.bp)
     app.register_blueprint(welcome.bp)
     app.register_blueprint(item_table.bp)
     app.register_blueprint(auth_routes.bp)
+    app.register_blueprint(insight.bp)
 
     return app
 

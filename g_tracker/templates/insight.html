@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+
+{% block title %}
+
+{% endblock %}
+
+{% block main %}
+    <div class="mb-3">
+        <div class="mb-3" id="welcome-title">
+            Total spent: {{ spent }}
+            <p>
+                Graph:
+                <img class="w-25 p-3" src="{{ image }}" alt="User Image">
+            </p>
+        </div>
+    </div>
+{% endblock %}

@@ -51,6 +51,9 @@
                         {% if current_user.is_authenticated %}
                         <li class="nav-item"><a class="nav-link" href="/receipts">Receipts</a></li>
                         {% endif %}
+                        {% if current_user.is_authenticated %}
+                        <li class="nav-item"><a class="nav-link" href="/insight">Insight</a></li>
+                        {% endif %}
                         {% if current_user.is_anonymous %}
                         <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
                         {% else %}
