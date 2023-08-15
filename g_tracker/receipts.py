@@ -4,6 +4,11 @@ from g_tracker.helpers import *
 from werkzeug.utils import secure_filename
 from main import process_receipt_from_fpath, save_receipt_to_db
 from uuid import uuid4
+import numpy as np
+from skimage.transform import rotate
+from skimage.color import rgb2gray
+from deskew import determine_skew
+import cv2
 
 bp = Blueprint('receipt', __name__)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}  # HEIC files aren't supported yet
@@ -21,6 +26,27 @@ def process_file(f_path):
     receipt_id = save_receipt_to_db(receipt, person_id)
     # TODO: Add manual check by client
     current_app.config['RECEIPT_ID'] = receipt_id
+
+
+def deskew_image(image):
+    grayscale = rgb2gray(image)
+    angle = determine_skew(grayscale)
+    rotated = rotate(image, angle, resize=True) * 255
+    return rotated.astype(np.uint8)
+
+
+def straighten_img(f_path):
+    # Source: http://aishelf.org/bp-deskew/
+    with open(f_path, mode='rb') as f:
+        data = f.read()
+
+    nparr = np.frombuffer(data, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    image_out = deskew_image(image)
+
+    deskewed_f_path = f"{f_path.split('.')[0]}.jpg"
+    cv2.imwrite(deskewed_f_path, image_out)
+    return deskewed_f_path
 
 
 @bp.route("/scan", methods=["GET", "POST"])
@@ -50,7 +76,11 @@ def index():
             f_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
             print(f"{f_path=}")
             file.save(f_path)
-            process_file(f_path)
+
+            # STRAIGHTEN IMAGE
+            deskewed_f_path = straighten_img(f_path)
+
+            process_file(deskewed_f_path)
 
             return redirect(url_for('item_table.items'))
 

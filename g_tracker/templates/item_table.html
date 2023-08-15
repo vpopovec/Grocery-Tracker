@@ -10,8 +10,9 @@
       <div id="table"></div>
     </div>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
-    <script>
+    <script defer>
       const tableDiv = document.getElementById('table');
+      const receiptTotalDiv = document.getElementById('receipt-total');
 
       const updateUrl = (prev, query) => {
         return prev + (prev.indexOf('?') >= 0 ? '&' : '?') + new URLSearchParams(query).toString();
@@ -82,7 +83,15 @@
 
       tableDiv.addEventListener('focusout', ev => {
         if (ev.target.tagName === 'TD') {
+<!--        data-column-id="price"-->
           if (savedValue !== ev.target.textContent) {
+
+            console.log(ev);
+            if (ev.target.dataset.columnId == 'price') {
+                let receiptTotalDiv = document.getElementById('receipt-total');
+                let totalPrice = parseFloat(receiptTotalDiv.innerHTML) - parseFloat(savedValue) + parseFloat(ev.target.textContent);
+                receiptTotalDiv.innerHTML = Math.round(totalPrice * 100) / 100;
+            }
             fetch('/api/data', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
@@ -124,6 +133,6 @@
         location.reload();
       }
     </script>
-    <div class="total-price mx-auto p-3">Total paid: {{receipt_total}}</div>
+    <div class="total-price mx-auto p-3">Total paid: <div class="d-inline" id="receipt-total">{{receipt_total}}</div></div>
 
 {% endblock %}
