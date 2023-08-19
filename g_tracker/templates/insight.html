@@ -6,12 +6,20 @@
 
 {% block main %}
     <div class="mb-3">
-        <div class="mb-3" id="welcome-title">
-            Total spent: {{ spent }}
-            <p>
-                Graph:
-                <img class="w-25 p-3" src="{{ image }}" alt="User Image">
-            </p>
+        <h3 class="mb-3" id="welcome-title">
+            Insights into your spending
+        </h3>
+        <div class="container">
+            <div class="row">
+                <figure class="col-sm">
+                    <p><img class="" src="{{ weekly }}" alt="Weekly spending">
+                    <figcaption>Weekly spending</figcaption><p>
+                </figure>
+                <figure class="col-sm">
+                    <p><img class="" src="{{ monthly }}" alt="Monthly spending">
+                    <figcaption>Monthly spending</figcaption><p>
+                </figure>
+            </div>
         </div>
     </div>
 {% endblock %}
