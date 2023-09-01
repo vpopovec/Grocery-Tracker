@@ -219,8 +219,8 @@ def process_receipt_from_fpath(f_name: str) -> Receipt:
     return receipt
 
 
-def save_receipt_to_db(receipt: Receipt, person_id: int) -> int:
-    return db.save_receipt(receipt, person_id)
+def save_receipt_to_db(receipt: Receipt, person_id: int, shrunk_f_name: str) -> int:
+    return db.save_receipt(receipt, person_id, shrunk_f_name)
 
 
 if __name__ == '__main__':

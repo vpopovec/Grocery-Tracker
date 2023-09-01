@@ -39,7 +39,7 @@ class Database:
 
         return person_id, name
 
-    def save_receipt(self, receipt, person_id) -> int:
+    def save_receipt(self, receipt, person_id, f_name='') -> int:
         if not receipt.total or not receipt.grocery_list:
             raise ValueError(f'Receipt is empty {receipt.total} len {len(receipt.grocery_list)}')
 
@@ -62,7 +62,7 @@ class Database:
             self.cur.execute(sql, item_task)
 
         sql = ''' INSERT INTO scan(f_name, person_id, receipt_id) VALUES(?,?,?) '''
-        f_name = os.path.basename(receipt.f_name)
+        f_name = f_name or os.path.basename(receipt.f_name)
         self.cur.execute(sql, (f_name, person_id, receipt_id))
 
         Database.conn.commit()
