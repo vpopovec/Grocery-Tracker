@@ -17,18 +17,32 @@
         { id: 'person', name: 'Person' },
         { id: 'shop', name: 'Shop' },
         { id: 'total', name: 'Total', sort: {
-                        compare: (a, b) => {
-                            if (parseFloat(a) > parseFloat(b)) {
-                                return 1;
-                            } else if (parseFloat(b) > parseFloat(a)) {
-                                return -1;
-                            } else {
-                                return 0;
-                            }
-                        },
-                    },
+            compare: (a, b) => {
+              if (parseFloat(a) > parseFloat(b)) {
+                  return 1;
+              } else if (parseFloat(b) > parseFloat(a)) {
+                  return -1;
+              } else {
+                  return 0;
+              }
+            },
+          },
         },
-        { id: 'date', name: 'Shopping date', sort: true },
+        { id: 'date', name: 'Shopping date', sort: {
+            compare: (a, b) => {
+              const d1 = Date.parse(a);
+              const d2 = Date.parse(b);
+
+              if (d1 > d2) {
+                  return 1;
+              } else if (d2 > d1) {
+                  return -1;
+              } else {
+                  return 0;
+              }
+            },
+          },
+        },
         { id: 'items', name: 'Show' }
       ],
       data: [
@@ -37,7 +51,7 @@
             person: '{{ buyer.name }}',
             shop: '{{ receipt.shop_name }}',
             total: '{{ receipt.total }}',
-            date: '{{ receipt.shopping_date.strftime('%d.%m.%Y') }}',
+            date: '{{ receipt.shopping_date.strftime('%Y/%m/%d') }}',
             items: gridjs.html(`<a href={{ url_for('item_table.items', receipt_id=receipt.receipt_id) }}><img class="svg-icon" src="/static/receipt.svg"/></a>`)
           },
         {% endfor %}

@@ -58,13 +58,14 @@ class Receipt:
         start_idx = 0
         found_items_start = False
         print(f"PREPROCESS ITEMS: {self.shop=}")
-        if self.shop == 'lidl':
-            try:
-                start_idx = [it[1].strip() for it in self.raw_items].index('EUR') + 1
-                found_items_start = True
-            except ValueError:
-                traceback.print_exc()
-                start_idx = 0
+        # NOTE: Maybe add it as a secondary option, if c. blocku is not found...
+        # if self.shop == 'lidl':
+        #     try:
+        #         start_idx = [it[1].strip() for it in self.raw_items].index('EUR') + 1
+        #         found_items_start = True
+        #     except ValueError:
+        #         traceback.print_exc()
+        #         start_idx = 0
         print(f"{start_idx=}")
 
         # Iterate over items, group individual items together from ALPHAS to "\d [ABE]"

@@ -39,8 +39,15 @@
           { id: 'amount', name: 'Amount', 'attributes': editableCellAttributes },
           { id: 'price', name: 'Price', 'attributes': editableCellAttributes, sort: {
                           compare: (a, b) => {
-                              return parseFloat(a) - parseFloat(b);
-                          },
+                              if (parseFloat(a) > parseFloat(b)) {
+                                  return 1;
+                              } else if (parseFloat(b) > parseFloat(a)) {
+                                  return -1;
+                              } else {
+                                  console.log("Numbers are the same... A " + a + " B " + b);
+                                  return 0;
+                              }
+                            },
                       },
           },
           // Can't use url_for in javascript because of item_id reference
