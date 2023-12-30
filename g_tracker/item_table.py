@@ -21,7 +21,8 @@ def receipts():
     with current_app.app_context():
         receipts_persons = get_receipts()
         for row in receipts_persons:
-            print(f'ROW: {row._fields} {row.keys()}')
+            print(f"{row=}")
+            # print(f'ROW: {row._fields} {row.keys()}')
         return render_template('receipt_table.html', receipts_persons=receipts_persons)
 
 
