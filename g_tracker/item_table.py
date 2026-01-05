@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, Scan, db
 import os
-
+import traceback
 bp = Blueprint('item_table', __name__)
 
 
@@ -20,8 +20,12 @@ def get_receipts():
 def receipts():
     with current_app.app_context():
         receipts_persons = get_receipts()
+        print(f'RECEIPTS PERSONS: {receipts_persons}')
         for row in receipts_persons:
-            print(f'ROW: {row._fields} {row.keys()}')
+            try:
+                print(f'ROW: {row._fields}')
+            except:
+                print(f'ERROR: {traceback.format_exc()}')
         return render_template('receipt_table.html', receipts_persons=receipts_persons)
 
 

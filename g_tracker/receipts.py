@@ -11,7 +11,7 @@ from deskew import determine_skew
 import cv2
 import os
 from PIL import Image
-
+import io
 bp = Blueprint('receipt', __name__)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}  # HEIC files aren't supported yet
 
@@ -37,6 +37,42 @@ def deskew_image(image):
     return rotated.astype(np.uint8)
 
 
+
+# def preprocess_receipt_image(image_path):
+#     """
+#     Optimize image for OCR: denoise, enhance contrast, binarize
+#     """
+#     # Read image
+#     img = cv2.imread(image_path)
+    
+#     # Convert to grayscale (faster processing)
+#     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+#     # Resize if too large (OCR is faster on smaller images)
+#     height, width = gray.shape
+#     max_dimension = 2000  # Optimal for receipts
+#     if max(height, width) > max_dimension:
+#         scale = max_dimension / max(height, width)
+#         new_width = int(width * scale)
+#         new_height = int(height * scale)
+#         gray = cv2.resize(gray, (new_width, new_height), interpolation=cv2.INTER_AREA)
+    
+#     # Denoise (reduces OCR errors)
+#     denoised = cv2.fastNlMeansDenoising(gray, h=10, templateWindowSize=7, searchWindowSize=21)
+    
+#     # Enhance contrast using CLAHE (better for receipts)
+#     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+#     enhanced = clahe.apply(denoised)
+    
+#     # Adaptive thresholding (better than simple threshold for varying lighting)
+#     binary = cv2.adaptiveThreshold(
+#         enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+#         cv2.THRESH_BINARY, 11, 2
+#     )
+    
+#     return binary
+
+
 def straighten_img(f_path):
     # Source: http://aishelf.org/bp-deskew/
     with open(f_path, mode='rb') as f:
@@ -44,17 +80,62 @@ def straighten_img(f_path):
 
     nparr = np.frombuffer(data, np.uint8)
     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    image_out = deskew_image(image)
 
-    deskewed_f_path = f"{f_path.split('.')[0]}.jpg"
-    cv2.imwrite(deskewed_f_path, image_out)
+    # Deskew
+    image_out = deskew_image(image)
+    
+    # Preprocess for OCR
+    processed = preprocess_receipt_image_from_array(image_out)
+    
+    deskewed_f_path = f"{f_path.split('.')[0]}_processed.jpg"
+    cv2.imwrite(deskewed_f_path, processed)
     return deskewed_f_path
 
+
+# def preprocess_receipt_image_from_array(image_array):
+#     """Preprocess image array (after deskew)"""
+#     gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
+    
+#     # Resize if needed
+#     height, width = gray.shape
+#     max_dimension = 2000
+#     if max(height, width) > max_dimension:
+#         scale = max_dimension / max(height, width)
+#         gray = cv2.resize(gray, (int(width * scale), int(height * scale)), 
+#                          interpolation=cv2.INTER_AREA)
+    
+#     # Denoise
+#     denoised = cv2.fastNlMeansDenoising(gray, h=10)
+    
+#     # Enhance contrast
+#     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+#     enhanced = clahe.apply(denoised)
+    
+#     return enhanced
+    
 
 def shrink_image(f_path):
     jpeg_f_path = f"{f_path.split('.')[0]}.jpeg"
     foo = Image.open(f_path)
     foo.save(jpeg_f_path, optimize=True, quality=10)
+
+
+def preprocess_image_for_upload(image_bytes, max_dim=2000):
+    img = Image.open(io.BytesIO(image_bytes))
+    
+    # 1. Standardize Orientation (Fixes upside-down uploads)
+    img = img.convert("RGB")
+    
+    # 2. Resize while maintaining aspect ratio
+    w, h = img.size
+    if max(w, h) > max_dim:
+        scale = max_dim / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+    
+    # 3. Compress to JPEG
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=85)
+    return buffer.getvalue()
 
 
 @bp.route("/scan", methods=["GET", "POST"])

@@ -2,14 +2,25 @@ import re
 import subprocess
 import tempfile
 import traceback
-
+from config import Config
 from helpers import *
 from sqlite_db import Database
 from person import Person
+from pydantic import BaseModel
 import easyocr
 
 f_name = 'lidl_bj11.jpeg'
 db = Database()
+client = genai.Client(api_key=Config.GEMINI_API_KEY')
+
+
+# Try defining reader globally, to avoid re-initialization
+# reader = easyocr.Reader(
+#         ['sk'],  # Slovak language
+#         gpu=True,  # Enable GPU if available (major speedup!)
+#         verbose=False,  # Reduce logging overhead
+#         # quantize=True,  # Use quantized models (faster, slightly less accurate)
+#     )
 
 
 def main():
@@ -29,23 +40,72 @@ def main():
         # db.save_receipt(receipt, person.id)
 
 
+class ReceiptItem(BaseModel):
+    name: str
+    quantity: float
+    unit_price: float
+    total_price: float
+
+class ReceiptData(BaseModel):
+    shop_name: str
+    date: str
+    items: List[ReceiptItem]
+    total_amount: float
+
+
+def scan_receipt_with_gemini(f_name: str) -> list:
+    # Load the receipt image
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+
+    prompt = "Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema."
+
+    # 3. Call the model with Structured Output (JSON mode)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
+            prompt,
+            {"inline_data": {"mime_type": "image/jpeg", "data": image_bytes}}
+        ],
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": ReceiptData,
+        }
+    )
+
+    # 4. Access the parsed data directly
+    print(f"{response.parsed=}")
+    return response.parsed
+
+
 class Receipt:
-    reader = easyocr.Reader(['sk'], gpu=False)
+    reader = reader
+    # reader = easyocr.Reader(
+    #     ['sk'],  # Slovak language
+    #     gpu=True,  # Enable GPU if available (major speedup!)
+    #     verbose=False,  # Reduce logging overhead
+    #     quantize=True,  # Use quantized models (faster, slightly less accurate)
+    # )
 
     def __init__(self, f_name):
         self.f_name = f_name
         print(f"Receipt.f_name = {f_name}")
+        # TODO: Check why we use cached receipt, if we are using Gemini OCR
         # Check if raw_items are stored in cache
-        cached = get_cached_receipt(f_name)
-        # self.raw_items = cached or Receipt.reader.readtext(f'receipts/{f_name}')
-        self.raw_items = cached or Receipt.reader.readtext(f_name)
-        if not cached:
-            cache_receipt(self.raw_items, f_name)
-        print(f"RAW ITEMS: {self.raw_items=}")
-        self.receipt_text = ''.join([el[1].lower() for el in self.raw_items])
-        self.shop = get_shop(self.receipt_text)
+        # cached = get_cached_receipt(f_name)
+        # if not cached:
+            # cache_receipt(self.raw_items, f_name)
+
+        # self.receipt_text = ''.join([el[1].lower() for el in self.raw_items])
+        # self.receipt_text = ''.join([el.lower() for el in self.raw_items])
+        # self.shop = get_shop(self.receipt_text)
+        # self.shopping_date = get_shopping_date(self.receipt_text)
+
+        self.receipt_info = scan_receipt_with_gemini(f_name)
+        self.shop = self.receipt_info.shop_name
+        self.shopping_date = self.receipt_info.date
+
         print(f"GOT SHOP: {self.shop=}")
-        self.shopping_date = get_shopping_date(self.receipt_text)
         print(f'DATE OF SHOPPING {self.shopping_date=}')
         self.grocery_list = []
 
@@ -53,134 +113,139 @@ class Receipt:
     def total(self):
         return round(sum([i['final_price'] for i in self.grocery_list]), 2)
 
-    def preprocess_items(self):
-        items, item = [], []
-        start_idx = 0
-        found_items_start = False
-        print(f"PREPROCESS ITEMS: {self.shop=}")
-        # NOTE: Maybe add it as a secondary option, if c. blocku is not found...
-        # if self.shop == 'lidl':
-        #     try:
-        #         start_idx = [it[1].strip() for it in self.raw_items].index('EUR') + 1
-        #         found_items_start = True
-        #     except ValueError:
-        #         traceback.print_exc()
-        #         start_idx = 0
-        print(f"{start_idx=}")
+    # def preprocess_items(self):
+    #     items, item = [], []
+    #     start_idx = 0
+    #     found_items_start = False
+    #     print(f"PREPROCESS ITEMS: {self.shop=}")
+    #     # NOTE: Maybe add it as a secondary option, if c. blocku is not found...
+    #     # if self.shop == 'lidl':
+    #     #     try:
+    #     #         start_idx = [it[1].strip() for it in self.raw_items].index('EUR') + 1
+    #     #         found_items_start = True
+    #     #     except ValueError:
+    #     #         traceback.print_exc()
+    #     #         start_idx = 0
+    #     print(f"{start_idx=}")
 
-        # Iterate over items, group individual items together from ALPHAS to "\d [ABE]"
-        for indx, raw_item in enumerate(self.raw_items[start_idx:], start_idx):
-            i_pos, i_name, _ = raw_item
-            print(i_name, end='  >>  ')
-            is_item_name = get_item_name(i_name)
-            prev_item = self.raw_items[indx - 1] if indx else ('', '', '')
+    #     # Iterate over items, group individual items together from ALPHAS to "\d [ABE]"
+    #     for indx, raw_item in enumerate(self.raw_items[start_idx:], start_idx):
+    #         i_pos, i_name, _ = raw_item
+    #         print(i_name, end='  >>  ')
+    #         is_item_name = get_item_name(i_name)
+    #         prev_item = self.raw_items[indx - 1] if indx else ('', '', '')
 
-            # End of item info by receiving new item name
-            # if item and items and is_item_name and not get_item_name(prev_item[1]):
+    #         # End of item info by receiving new item name
+    #         # if item and items and is_item_name and not get_item_name(prev_item[1]):
 
-            item_text = ' '.join([i[1] for i in item])
-            # TODO: ALSO END if previous raw_text for the item is something like k[g]\s*[0-9,]\s*
-            end_of_item = re.search(r' .?k[sg9ce] .?.?\d+(.\d{2})?', item_text, re.I)  # re.escape was not working
-            end_of_discount = re.search(r'(z.ava|zaloha).*(ks)?\s*[-~]?\d+[.,]\d+', item_text, re.I)
-            print(f"{end_of_item=}", end=' >> ')
-            print(f"{end_of_discount=}", end=" >> ")
+    #         item_text = ' '.join([i[1] for i in item])
+    #         # TODO: ALSO END if previous raw_text for the item is something like k[g]\s*[0-9,]\s*
+    #         end_of_item = re.search(r' .?k[sg9ce] .?.?\d+(.\d{2})?', item_text, re.I)  # re.escape was not working
+    #         end_of_discount = re.search(r'(z.ava|zaloha).*(ks)?\s*[-~]?\d+[.,]\d+', item_text, re.I)
+    #         print(f"{end_of_item=}", end=' >> ')
+    #         print(f"{end_of_discount=}", end=" >> ")
 
-            # if item and is_item_name and (not get_item_name(prev_item[1]) or end_of_item):
-            if item and is_item_name and (end_of_item or end_of_discount):
-                print(f"FINISHING ITEM 0: {item}")
-                items.append(item)
-                item = []
+    #         # if item and is_item_name and (not get_item_name(prev_item[1]) or end_of_item):
+    #         if item and is_item_name and (end_of_item or end_of_discount):
+    #             print(f"FINISHING ITEM 0: {item}")
+    #             items.append(item)
+    #             item = []
 
-            item.append(raw_item)
-            item_text = ' '.join([i[1] for i in item])
+    #         item.append(raw_item)
+    #         item_text = ' '.join([i[1] for i in item])
 
-            # If item_text contains a known prefix (for items) or 4-digit receipt number, empty item
-            if re.search(r'[cč]?.bl[oc]k.?.?.? .?\d+', item_text, re.I):
-                found_items_start = True
-                print("CLEARING ITEM")
-                item = []
-            elif re.search(r' \d{4} ', item_text) and not found_items_start:
-                print("CLEARING ITEM C.BLOCKU NOT FOUND")
-                item = []
-            print(f"{item_text=}")
-            print(f'|||| {is_item_name=} and not {get_item_name(prev_item[1])}')
+    #         # If item_text contains a known prefix (for items) or 4-digit receipt number, empty item
+    #         if re.search(r'[cč]?.bl[oc]k.?.?.? .?\d+', item_text, re.I):
+    #             found_items_start = True
+    #             print("CLEARING ITEM")
+    #             item = []
+    #         elif re.search(r' \d{4} ', item_text) and not found_items_start:
+    #             print("CLEARING ITEM C.BLOCKU NOT FOUND")
+    #             item = []
+    #         print(f"{item_text=}")
+    #         print(f'|||| {is_item_name=} and not {get_item_name(prev_item[1])}')
 
-            # End of item info by getting the final price
-            if i_name and (re.search(r'\d [ABCE]', i_name[-3:], re.I) or re.search(r'[0-9,]+\s*[ABCE]$', item_text, re.I)):
-                if item:
-                    print(f"FINISHING ITEM 1: {item}")
-                    items.append(item)
-                item = []
+    #         # End of item info by getting the final price
+    #         if i_name and (re.search(r'\d [ABCE]', i_name[-3:], re.I) or re.search(r'[0-9,]+\s*[ABCE]$', item_text, re.I)):
+    #             if item:
+    #                 print(f"FINISHING ITEM 1: {item}")
+    #                 items.append(item)
+    #             item = []
 
-        # Remove prefixes from 1st item
-        # if items and (prefix_and_item := re.split(r'c.bloku. \d{4} ', items[0])):
-        #     print(f"PREFIX AND ITEM {prefix_and_item[1]}")
-        return items
+    #     # Remove prefixes from 1st item
+    #     # if items and (prefix_and_item := re.split(r'c.bloku. \d{4} ', items[0])):
+    #     #     print(f"PREFIX AND ITEM {prefix_and_item[1]}")
+    #     return items
 
-    def process_grocery_list(self, items):
-        for item_indx, item in enumerate(items):
-            raw_text = ' '.join([i[1] for i in item])
-            # Make Ks, KG etc. lowercase
-            # Banany 1,316 Ka 1,69 2,22 B
-            raw_text = re.sub('( .?k[sg] )', lambda pat: ' ' + pat.group(1).lower()[-3:], raw_text, flags=re.I)
-            raw_text = re.sub('( .?k9 )', ' kg ', raw_text)
-            raw_text = re.sub(r'( .?ka )', ' kg ', raw_text, flags=re.I)
-            raw_text = re.sub(r'( .?kc )', ' kg ', raw_text, flags=re.I)
-            raw_text = re.sub('( .?ke )', ' ks ', raw_text)
+    # def process_grocery_list(self, items):
+    #     for item_indx, item in enumerate(items):
+    #         raw_text = ' '.join([i[1] for i in item])
+    #         # Make Ks, KG etc. lowercase
+    #         # Banany 1,316 Ka 1,69 2,22 B
+    #         raw_text = re.sub('( .?k[sg] )', lambda pat: ' ' + pat.group(1).lower()[-3:], raw_text, flags=re.I)
+    #         raw_text = re.sub('( .?k9 )', ' kg ', raw_text)
+    #         raw_text = re.sub(r'( .?ka )', ' kg ', raw_text, flags=re.I)
+    #         raw_text = re.sub(r'( .?kc )', ' kg ', raw_text, flags=re.I)
+    #         raw_text = re.sub('( .?ke )', ' ks ', raw_text)
 
-            print(f"UNFILTERED: {raw_text}")
-            if (' ks' not in raw_text and ' kg' not in raw_text) or is_discount(raw_text):
-                continue
-            print(f"RAW TEXT: {raw_text}")
+    #         print(f"UNFILTERED: {raw_text}")
+    #         if (' ks' not in raw_text and ' kg' not in raw_text) or is_discount(raw_text):
+    #             continue
+    #         print(f"RAW TEXT: {raw_text}")
 
-            amount = amount_raw = ''
-            is_pcs = ' ks' in raw_text
-            is_kg = ' kg' in raw_text
-            if is_pcs:
-                # 0-9io are possible digits
-                try:
-                    amount_raw = re.search(r'.*\s+([0-9io{]{,3})\s+ks', raw_text, flags=re.IGNORECASE).group(1)
-                except AttributeError:  # missing pcs info
-                    print(f"Couldn't extract pcs info for {raw_text}, defaulting amount to 1")
-                amount = fix_amount_int(amount_raw) if amount_raw else 1  # Defaults to 1 if it can't find num
+    #         amount = amount_raw = ''
+    #         is_pcs = ' ks' in raw_text
+    #         is_kg = ' kg' in raw_text
+    #         if is_pcs:
+    #             # 0-9io are possible digits
+    #             try:
+    #                 amount_raw = re.search(r'.*\s+([0-9io{]{,3})\s+ks', raw_text, flags=re.IGNORECASE).group(1)
+    #             except AttributeError:  # missing pcs info
+    #                 print(f"Couldn't extract pcs info for {raw_text}, defaulting amount to 1")
+    #             amount = fix_amount_int(amount_raw) if amount_raw else 1  # Defaults to 1 if it can't find num
 
-            elif is_kg:
-                try:
-                    amount_raw = re.search(r'(\d+\s?,\d+)\s+kg', raw_text).group(1)
-                    amount_stripped = "".join(amount_raw.split())
-                except AttributeError:
-                    try:
-                        # Try getting just decimal part and assume 0
-                        amount_raw = re.search(r'(\d+)\s+kg', raw_text).group(1)
-                        amount_stripped = f"0,{amount_raw}"
-                    except AttributeError:
-                        amount_stripped = '1,0'
+    #         elif is_kg:
+    #             try:
+    #                 amount_raw = re.search(r'(\d+\s?,\d+)\s+kg', raw_text).group(1)
+    #                 amount_stripped = "".join(amount_raw.split())
+    #             except AttributeError:
+    #                 try:
+    #                     # Try getting just decimal part and assume 0
+    #                     amount_raw = re.search(r'(\d+)\s+kg', raw_text).group(1)
+    #                     amount_stripped = f"0,{amount_raw}"
+    #                 except AttributeError:
+    #                     amount_stripped = '1,0'
 
-                # Remove all whitespace
-                amount = float_sk(amount_stripped)
+    #             # Remove all whitespace
+    #             amount = float_sk(amount_stripped)
 
-            split_parts = re.split(rf'{amount_raw}\s+k[gs]', raw_text)
-            print(f"{split_parts=}")
-            i_name, prices = split_parts[0], split_parts[-1]
-            i_name = fix_item_name(i_name)
+    #         split_parts = re.split(rf'{amount_raw}\s+k[gs]', raw_text)
+    #         print(f"{split_parts=}")
+    #         i_name, prices = split_parts[0], split_parts[-1]
+    #         i_name = fix_item_name(i_name)
 
-            try:
+    #         try:
 
-                # if self.shop in ['billa', 'lidl', 'kaufland', 'yeme'] or not self.shop:
-                sub_price = get_sub_price(prices, is_pcs, amount)
+    #             # if self.shop in ['billa', 'lidl', 'kaufland', 'yeme'] or not self.shop:
+    #             sub_price = get_sub_price(prices, is_pcs, amount)
 
-                next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []
-                discount = get_discount_from_item(next_item)
-                print(f"{amount=} {sub_price=} {discount=}")
-                if discount > amount * sub_price:
-                    discount = 0
-                final_price = round(amount * sub_price - discount, 2)
+    #             next_item = items[item_indx + 1] if item_indx + 1 < len(items) else []
+    #             discount = get_discount_from_item(next_item)
+    #             print(f"{amount=} {sub_price=} {discount=}")
+    #             if discount > amount * sub_price:
+    #                 discount = 0
+    #             final_price = round(amount * sub_price - discount, 2)
 
-                self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
+    #             self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
 
-            except Exception as e:
-                traceback.print_exc()
-                print(f"Error processing {raw_text} {e}")
+    #         except Exception as e:
+    #             traceback.print_exc()
+    #             print(f"Error processing {raw_text} {e}")
+
+    def process_grocery_list_with_gemini(self, items):
+        for item in items:
+            # self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
+
 
     def user_edit(self):
         """
@@ -215,7 +280,8 @@ class Receipt:
 
 def process_receipt_from_fpath(f_name: str) -> Receipt:
     receipt = Receipt(f_name)
-    items = receipt.preprocess_items()
+    # items = receipt.preprocess_items()
+    # items = receipt.scan_receipt_with_gemini(f_name)
     receipt.process_grocery_list(items)
     return receipt
 
