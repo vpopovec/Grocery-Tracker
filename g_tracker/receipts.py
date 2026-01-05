@@ -30,11 +30,12 @@ def process_file(f_path, shrunk_f_name):
     current_app.config['RECEIPT_ID'] = receipt_id
 
 
-def deskew_image(image):
-    grayscale = rgb2gray(image)
-    angle = determine_skew(grayscale)
-    rotated = rotate(image, angle, resize=True) * 255
-    return rotated.astype(np.uint8)
+# TODO: Check if gemini can work with skewed images
+# def deskew_image(image):
+#     grayscale = rgb2gray(image)
+#     angle = determine_skew(grayscale)
+#     rotated = rotate(image, angle, resize=True) * 255
+#     return rotated.astype(np.uint8)
 
 
 
@@ -75,20 +76,23 @@ def deskew_image(image):
 
 def straighten_img(f_path):
     # Source: http://aishelf.org/bp-deskew/
-    with open(f_path, mode='rb') as f:
-        data = f.read()
+    # with open(f_path, mode='rb') as f:
+    #     data = f.read()
 
-    nparr = np.frombuffer(data, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    # nparr = np.frombuffer(data, np.uint8)
+    # image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     # Deskew
-    image_out = deskew_image(image)
+    # image_out = deskew_image(image)
     
     # Preprocess for OCR
-    processed = preprocess_receipt_image_from_array(image_out)
+    processed = preprocess_image_for_upload(f_path)
+    # processed = preprocess_receipt_image_from_array(image_out)
     
     deskewed_f_path = f"{f_path.split('.')[0]}_processed.jpg"
-    cv2.imwrite(deskewed_f_path, processed)
+    # cv2.imwrite(deskewed_f_path, processed)
+    with open(deskewed_f_path, 'wb') as f:
+        f.write(processed)
     return deskewed_f_path
 
 
@@ -120,9 +124,10 @@ def shrink_image(f_path):
     foo.save(jpeg_f_path, optimize=True, quality=10)
 
 
-def preprocess_image_for_upload(image_bytes, max_dim=2000):
-    img = Image.open(io.BytesIO(image_bytes))
-    
+def preprocess_image_for_upload(f_path, max_dim=2000):
+    # img = Image.open(io.BytesIO(image_bytes))
+    img = Image.open(f_path)
+
     # 1. Standardize Orientation (Fixes upside-down uploads)
     img = img.convert("RGB")
     

@@ -18,8 +18,7 @@ class ReceiptData(BaseModel):
 
 # 2. Initialize the Gemini Client
 # Get your API key from https://aistudio.google.com/
-# client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
-client = genai.Client(api_key='AIzaSyC-VdA9AA2RFOcZyS9Dqg_G7Vt5UmE3S7Q')
+client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
 
 def extract_receipt_data(image_path: str):
     # Load the receipt image

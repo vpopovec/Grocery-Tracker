@@ -7,11 +7,13 @@ from helpers import *
 from sqlite_db import Database
 from person import Person
 from pydantic import BaseModel
-import easyocr
+# import easyocr
+from google import genai
+
 
 f_name = 'lidl_bj11.jpeg'
 db = Database()
-client = genai.Client(api_key=Config.GEMINI_API_KEY')
+client = genai.Client(api_key=Config.GEMINI_API_KEY)
 
 
 # Try defining reader globally, to avoid re-initialization
@@ -49,16 +51,16 @@ class ReceiptItem(BaseModel):
 class ReceiptData(BaseModel):
     shop_name: str
     date: str
-    items: List[ReceiptItem]
+    items: list[ReceiptItem]
     total_amount: float
 
 
 def scan_receipt_with_gemini(f_name: str) -> list:
     # Load the receipt image
-    with open(image_path, "rb") as f:
+    with open(f_name, "rb") as f:
         image_bytes = f.read()
 
-    prompt = "Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema."
+    prompt = "Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format."
 
     # 3. Call the model with Structured Output (JSON mode)
     response = client.models.generate_content(
@@ -79,7 +81,7 @@ def scan_receipt_with_gemini(f_name: str) -> list:
 
 
 class Receipt:
-    reader = reader
+    # reader = reader
     # reader = easyocr.Reader(
     #     ['sk'],  # Slovak language
     #     gpu=True,  # Enable GPU if available (major speedup!)
@@ -102,9 +104,9 @@ class Receipt:
         # self.shopping_date = get_shopping_date(self.receipt_text)
 
         self.receipt_info = scan_receipt_with_gemini(f_name)
+
         self.shop = self.receipt_info.shop_name
         self.shopping_date = self.receipt_info.date
-
         print(f"GOT SHOP: {self.shop=}")
         print(f'DATE OF SHOPPING {self.shopping_date=}')
         self.grocery_list = []
@@ -244,7 +246,7 @@ class Receipt:
 
     def process_grocery_list_with_gemini(self, items):
         for item in items:
-            # self.grocery_list.append({'name': i_name, 'amount': amount, 'final_price': final_price})
+            self.grocery_list.append({'name': item.name, 'amount': item.quantity, 'final_price': item.total_price})
 
 
     def user_edit(self):
@@ -282,7 +284,7 @@ def process_receipt_from_fpath(f_name: str) -> Receipt:
     receipt = Receipt(f_name)
     # items = receipt.preprocess_items()
     # items = receipt.scan_receipt_with_gemini(f_name)
-    receipt.process_grocery_list(items)
+    receipt.process_grocery_list_with_gemini(receipt.receipt_info.items)
     return receipt
 
 

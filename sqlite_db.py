@@ -46,7 +46,8 @@ class Database:
         # Insert info into receipt table
         sql = ''' INSERT INTO receipt(person_id, shop_name, total, shopping_date) VALUES(?,?,?,?) '''
         # receipt_task = (person.id, receipt.shop, receipt.total, get_iso_from_slovak_dt_str(receipt.shopping_date))
-        date_iso = get_datetime_from_slovak_dt(receipt.shopping_date)
+        # date_iso = get_datetime_from_slovak_dt(receipt.shopping_date)
+        date_iso = receipt.shopping_date
         receipt_task = (person_id, receipt.shop, receipt.total, date_iso)
         self.cur.execute(sql, receipt_task)
         receipt_id = self.cur.lastrowid
