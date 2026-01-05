@@ -3,7 +3,8 @@ from flask_login import login_user, logout_user, current_user
 from g_tracker import db
 from g_tracker.forms import LoginForm, RegistrationForm
 from g_tracker.models import Person
-from werkzeug.urls import url_parse
+# from werkzeug.urls import url_parse
+from urllib.parse import urlparse
 
 bp = Blueprint('auth', __name__)
 
@@ -22,7 +23,7 @@ def login():
         login_user(person, remember=form.remember_me.data)
 
         next_page = request.args.get('next')
-        if not next_page or url_parse(next_page).netloc != '':
+        if not next_page or urlparse(next_page).netloc != '':
             next_page = url_for('welcome.index')
         return redirect(next_page)
     return render_template('login.html', title='Sign In', form=form)
