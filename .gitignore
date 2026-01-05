@@ -1,9 +1,57 @@
-__pycache__
-.idea
-main (copy).py
-notes.txt
-check_easyocr.py
-receipts/other_shops
-receipts/mine
-flask_session/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
 venv/
+ENV/
+.venv/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# Flask
+flask_session/
+
+# Receipts (user data - keep cache structure but not files)
+receipts/*.jpg
+receipts/*.jpeg
+receipts/*.png
+receipts/*.gif
+receipts/*.json
+receipts/other_shops/
+receipts/mine/
+!receipts/cache/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+notes.txt
+main (copy).py
+check_easyocr.py
+
+# Static files (user-generated)
+g_tracker/static/graphs/
+g_tracker/static/user_*/

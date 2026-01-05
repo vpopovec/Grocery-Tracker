@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, Scan, db
 import os
-
+import traceback
 bp = Blueprint('item_table', __name__)
 
 
@@ -20,9 +20,12 @@ def get_receipts():
 def receipts():
     with current_app.app_context():
         receipts_persons = get_receipts()
+        print(f'RECEIPTS PERSONS: {receipts_persons}')
         for row in receipts_persons:
-            print(f"{row=}")
-            # print(f'ROW: {row._fields} {row.keys()}')
+            try:
+                print(f'ROW: {row._fields}')
+            except:
+                print(f'ERROR: {traceback.format_exc()}')
         return render_template('receipt_table.html', receipts_persons=receipts_persons)
 
 
@@ -80,7 +83,8 @@ def items():
         receipt_total = db.session.execute(select(Receipt).where(Receipt.receipt_id == receipt_id)) \
                                             .first()[0].total
         print(f"RECEIPT TOTAL {receipt_total}")
-    except:
+    except (AttributeError, IndexError, TypeError) as e:
+        # Receipt not found or invalid receipt_id
         receipt_total = 0
 
     with current_app.app_context():
@@ -157,14 +161,31 @@ def update():
 @bp.route('/photo')
 @login_required
 def photo():
-    # TODO: Only allow user to see his own photos
+    person_id = int(current_user.get_id())
+    
     if f_name := request.args.get('f_name'):
+        # Verify that the scan belongs to the current user
+        scan = db.session.execute(
+            select(Scan).where(Scan.f_name == f_name, Scan.person_id == person_id)
+        ).first()
+        
+        if not scan:
+            abort(403)  # Forbidden - user doesn't own this scan
+        
         f_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f_name)
         return send_file(f_path)
 
     # Get photo for current receipt
     current_receipt_id = current_app.config.get('RECEIPT_ID', 1)
-    scan = db.session.execute(select(Scan).where(Scan.receipt_id == current_receipt_id)
-                              .order_by(Scan.scan_id.desc())).first()[0]  # Order bcs of multiple scans with the same receipt_id
-    print('scan', scan)
+    scan_result = db.session.execute(
+        select(Scan).where(
+            Scan.receipt_id == current_receipt_id,
+            Scan.person_id == person_id
+        ).order_by(Scan.scan_id.desc())
+    ).first()  # Order bcs of multiple scans with the same receipt_id
+    
+    if not scan_result:
+        abort(404)  # Not found
+    
+    scan = scan_result[0]
     return redirect(url_for('item_table.photo', f_name=scan.f_name))
