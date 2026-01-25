@@ -18,7 +18,7 @@ class Receipt(db.Model):
 
     # ensure unique receipts for 1 person
     __table_args__ = (
-        db.UniqueConstraint('person_id', 'shopping_date', name='_person_shopping_date_uc'),
+        db.UniqueConstraint('person_id', 'shop_name', 'shopping_date', 'total', name='_person_shopping_date_uc'),
     )
 
     def __repr__(self):

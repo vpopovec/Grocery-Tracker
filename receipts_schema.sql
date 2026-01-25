@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS receipt (
 	total real NOT NULL,
 	shopping_date datetime,
 	FOREIGN KEY (person_id) REFERENCES person (person_id)
-	UNIQUE(person_id, shop_name, shopping_date) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
+	UNIQUE(person_id, shop_name, shopping_date, total) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
 );
 
 -- items table

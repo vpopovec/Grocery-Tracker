@@ -49,7 +49,9 @@ def scan_receipt_with_gemini(f_name: str) -> list:
     with open(f_name, "rb") as f:
         image_bytes = f.read()
 
-    prompt = "Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format."
+    prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format. 
+    If an individual item is just a discount (shows negative price), then subtract this amount from the item above the discount. 
+    Categorize items into macro and micro categories based on the provided taxonomy in Slovak language: ```{slovak_taxonomy}```"""
 
     # 3. Call the model with Structured Output (JSON mode)
     response = client.models.generate_content(
