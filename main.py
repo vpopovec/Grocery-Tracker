@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import tempfile
@@ -13,6 +14,75 @@ from google import genai
 f_name = 'lidl_bj11.jpeg'
 db = Database()
 client = genai.Client(api_key=Config.GEMINI_API_KEY)
+
+# Makro = široká skupina, mikro = podkategória (iba hodnoty z tohto zoznamu).
+SLOVAK_TAXONOMY: dict[str, list[str]] = {
+    "Čerstvé potraviny": [
+        "Mliečne výrobky",
+        "Pečivo a pekárenské výrobky",
+        "Mäso a hydina",
+        "Údeniny a salámy",
+        "Ryby a morské plody",
+        "Ovocie",
+        "Zelenina",
+        "Vajcia",
+    ],
+    "Trvanlivé potraviny": [
+        "Cestoviny, ryža a obilniny",
+        "Konzervované a pohotové jedlá",
+        "Oleje, octy a dressingy",
+        "Omáčky, dochucovadlá a koreniny",
+        "Sladkosti a cukrovinky",
+        "Snackové pochutiny a chipsy",
+        "Cereálie a müsli",
+        "Džemy, med a nátierky",
+        "Prísady na pečenie",
+        "Bezmäsité a rastlinné alternatívy",
+    ],
+    "Nápoje": [
+        "Vody a minerálky",
+        "Nealkoholické nápoje",
+        "Šťavy a nektáry",
+        "Káva",
+        "Čaj",
+        "Pivo",
+        "Víno",
+        "Liehoviny a destiláty",
+    ],
+    "Mrazené potraviny": [
+        "Mrazená zelenina a ovocie",
+        "Mrazené polotovary a jedlá",
+        "Zmrzlina a mrazené dezerty",
+    ],
+    "Domácnosť": [
+        "Čistiace prostriedky",
+        "Papierové výrobky a utierky",
+        "Sáčky, fólie a obaly",
+        "Sviečky a zápalky",
+    ],
+    "Osobná hygiena a kozmetika": [
+        "Starostlivosť o telo",
+        "Starostlivosť o vlasy",
+        "Ústna hygiena",
+        "Kozmetika a parfuméria",
+    ],
+    "Zdravie a drogéria": [
+        "Vitamíny a doplnky výživy",
+        "Lieky bez predpisu (OTC)",
+        "Hygienické potreby",
+    ],
+    "Pre zvieratá": [
+        "Krmivo",
+        "Pamlsky a doplnky pre zvieratá",
+    ],
+    "Ostatné": [
+        "Nezaradené",
+        "Textil a oblečenie",
+        "Sezónne a darčekové",
+    ],
+}
+
+slovak_taxonomy = json.dumps(SLOVAK_TAXONOMY, ensure_ascii=False, indent=2)
 
 
 def main():
@@ -36,6 +106,8 @@ class ReceiptItem(BaseModel):
     quantity: float
     unit_price: float
     total_price: float
+    macro_category: str
+    micro_category: str
 
 class ReceiptData(BaseModel):
     shop_name: str
@@ -49,9 +121,12 @@ def scan_receipt_with_gemini(f_name: str) -> list:
     with open(f_name, "rb") as f:
         image_bytes = f.read()
 
-    prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format. 
-    If an individual item is just a discount (shows negative price), then subtract this amount from the item above the discount. 
-    Categorize items into macro and micro categories based on the provided taxonomy in Slovak language: ```{slovak_taxonomy}```"""
+    # leads to errors: If an individual item is a discount (negative final_price), then subtract this price from the item above if possible (item price will stay positive), otherwise keep the discount as separate item.
+    prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format.
+    If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
+    For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
+```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","dm drogerie markt","Unknown"]```.
+    Make sure the sum of individual prices is equal to the total price!!!"""
 
     # 3. Call the model with Structured Output (JSON mode)
     response = client.models.generate_content(
@@ -97,7 +172,15 @@ class Receipt:
 
     def process_grocery_list_with_gemini(self, items):
         for item in items:
-            self.grocery_list.append({'name': item.name, 'amount': item.quantity, 'final_price': item.total_price})
+            self.grocery_list.append(
+                {
+                    "name": item.name,
+                    "amount": item.quantity,
+                    "final_price": item.total_price,
+                    "macro_category": item.macro_category,
+                    "micro_category": item.micro_category,
+                }
+            )
 
 
     def user_edit(self):

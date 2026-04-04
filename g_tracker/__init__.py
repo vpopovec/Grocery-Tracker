@@ -17,6 +17,13 @@ def create_app(config_class=Config):
     db.init_app(app)
     login.init_app(app)
 
+    @app.context_processor
+    def inject_dev_password_reset():
+        return {
+            'dev_password_reset_enabled': bool(
+                app.config.get('ENABLE_DEV_PASSWORD_RESET')),
+        }
+
     # a simple page that says hello
     @app.route('/hello')
     def hello():

@@ -1,6 +1,9 @@
-from g_tracker import db, login
+from datetime import datetime
+
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from g_tracker import db, login
 
 
 class Receipt(db.Model):
@@ -44,6 +47,20 @@ class Person(UserMixin, db.Model):
 
     def __repr__(self):
         return f"<Person {self.username}, nickname {self.name}>"
+
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_token'
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.person_id'), nullable=False)
+    token_hash = db.Column(db.String(64), nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+
+    def is_valid(self) -> bool:
+        if self.used_at is not None:
+            return False
+        return datetime.utcnow() < self.expires_at
 
 
 @login.user_loader

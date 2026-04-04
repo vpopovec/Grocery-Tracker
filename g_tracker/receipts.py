@@ -10,7 +10,7 @@ from skimage.color import rgb2gray
 from deskew import determine_skew
 import cv2
 import os
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 bp = Blueprint('receipt', __name__)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}  # HEIC files aren't supported yet
@@ -120,15 +120,15 @@ def straighten_img(f_path):
 
 def shrink_image(f_path):
     jpeg_f_path = f"{f_path.split('.')[0]}.jpeg"
-    foo = Image.open(f_path)
+    foo = ImageOps.exif_transpose(Image.open(f_path))
     foo.save(jpeg_f_path, optimize=True, quality=10)
 
 
 def preprocess_image_for_upload(f_path, max_dim=2000):
     # img = Image.open(io.BytesIO(image_bytes))
-    img = Image.open(f_path)
+    img = ImageOps.exif_transpose(Image.open(f_path))
 
-    # 1. Standardize Orientation (Fixes upside-down uploads)
+    # 1. Standardize color (EXIF orientation already baked into pixels above)
     img = img.convert("RGB")
     
     # 2. Resize while maintaining aspect ratio

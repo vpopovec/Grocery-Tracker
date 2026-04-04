@@ -28,6 +28,19 @@ CREATE TABLE IF NOT EXISTS person (
     password_hash text
 );
 
+-- password reset tokens (dev-only flow; token stored as SHA-256 hex)
+CREATE TABLE IF NOT EXISTS password_reset_token (
+    id integer PRIMARY KEY,
+    person_id integer NOT NULL,
+    token_hash text NOT NULL,
+    expires_at datetime NOT NULL,
+    used_at datetime,
+    FOREIGN KEY (person_id) REFERENCES person (person_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_password_reset_token_token_hash
+    ON password_reset_token (token_hash);
+
 -- scans table
 CREATE TABLE IF NOT EXISTS scan (
     scan_id integer PRIMARY KEY,

@@ -1,4 +1,4 @@
-from flask import render_template, request, abort, current_app, Blueprint, send_file, url_for, redirect
+from flask import render_template, request, abort, current_app, Blueprint, send_file, url_for, redirect, flash
 from flask_login import login_required, current_user
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, Scan, db
@@ -41,6 +41,61 @@ def add_row():
     ))
     db.session.commit()
     return redirect(url_for('item_table.items'))
+
+
+@bp.route('/delete-receipt', methods=['POST'])
+@login_required
+def delete_receipt():
+    person_id = int(current_user.get_id())
+    receipt_id = request.form.get('receipt_id', type=int)
+    if not receipt_id:
+        abort(400)
+
+    row = db.session.execute(
+        select(Receipt).where(
+            Receipt.receipt_id == receipt_id,
+            Receipt.person_id == person_id,
+        )
+    ).first()
+    if row is None:
+        abort(404)
+    receipt = row[0]
+
+    scans = [
+        r[0]
+        for r in db.session.execute(
+            select(Scan).where(Scan.receipt_id == receipt_id, Scan.person_id == person_id)
+        ).all()
+    ]
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    for scan in scans:
+        safe_name = os.path.basename(scan.f_name)
+        f_path = os.path.join(upload_folder, safe_name)
+        if os.path.isfile(f_path):
+            try:
+                os.remove(f_path)
+            except OSError:
+                pass
+        db.session.delete(scan)
+
+    had_focus = current_app.config.get('RECEIPT_ID') == receipt_id
+    db.session.delete(receipt)
+    db.session.commit()
+
+    if had_focus:
+        next_row = db.session.execute(
+            select(Receipt.receipt_id)
+            .where(Receipt.person_id == person_id)
+            .order_by(Receipt.receipt_id.desc())
+            .limit(1)
+        ).first()
+        next_id = next_row[0] if next_row else None
+        if next_id is not None:
+            current_app.config['RECEIPT_ID'] = next_id
+        else:
+            current_app.config.pop('RECEIPT_ID', None)
+    flash('Receipt deleted.')
+    return redirect(url_for('item_table.receipts'))
 
 
 @bp.route('/delete-row')
