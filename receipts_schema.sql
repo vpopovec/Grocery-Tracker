@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS receipt (
 	shop_name text,
 	total real NOT NULL,
 	shopping_date datetime,
+	llm_elapsed_seconds real,
 	FOREIGN KEY (person_id) REFERENCES person (person_id)
 	UNIQUE(person_id, shop_name, shopping_date, total) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
 );

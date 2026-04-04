@@ -13,6 +13,7 @@ class Receipt(db.Model):
     shop_name = db.Column(db.Text, index=True)
     total = db.Column(db.Float, nullable=False)
     shopping_date = db.Column(db.DateTime)
+    llm_elapsed_seconds = db.Column(db.Float, nullable=True)
     person = db.relationship("Person", backref="receipt")
     # Delete items on deletion of receipt (not on replace, leider)
     items = db.relationship("Item", backref="receipt", cascade="all, delete-orphan")

@@ -10,10 +10,20 @@ def load_db_schema(conn, schema_fp):
         conn.executescript(fp.read())
 
 
+def ensure_receipt_llm_elapsed_column(conn):
+    """Add llm_elapsed_seconds to legacy databases that predate this column."""
+    info = conn.execute("PRAGMA table_info(receipt)").fetchall()
+    names = {row[1] for row in info}
+    if "llm_elapsed_seconds" not in names:
+        conn.execute("ALTER TABLE receipt ADD COLUMN llm_elapsed_seconds REAL")
+        conn.commit()
+
+
 class Database:
     # Disable same check thread to allow usage across multiple requests
     conn = sqlite3.connect(db_fp, check_same_thread=False)
     load_db_schema(conn, schema_fp)
+    ensure_receipt_llm_elapsed_column(conn)
 
     def __init__(self):
         # Unique cursor for every Database instance
@@ -44,9 +54,10 @@ class Database:
             raise ValueError(f'Receipt is empty {receipt.total} len {len(receipt.grocery_list)}')
 
         # Insert info into receipt table
-        sql = ''' INSERT INTO receipt(person_id, shop_name, total, shopping_date) VALUES(?,?,?,?) '''
+        sql = ''' INSERT INTO receipt(person_id, shop_name, total, shopping_date, llm_elapsed_seconds) VALUES(?,?,?,?,?) '''
         date_iso = receipt.shopping_date
-        receipt_task = (person_id, receipt.shop, receipt.total, date_iso)
+        llm_s = getattr(receipt, "llm_elapsed_seconds", None)
+        receipt_task = (person_id, receipt.shop, receipt.total, date_iso, llm_s)
         self.cur.execute(sql, receipt_task)
         receipt_id = self.cur.lastrowid
 

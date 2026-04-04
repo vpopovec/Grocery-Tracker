@@ -9,6 +9,25 @@ login = LoginManager()
 login.login_view = 'auth.login'
 
 
+def _ensure_sqlite_receipt_columns(app):
+    """Keep SQLite schema in sync when the app runs without importing main/sqlite_db.Database."""
+    try:
+        from sqlalchemy.engine.url import make_url
+        u = make_url(app.config['SQLALCHEMY_DATABASE_URI'])
+    except Exception:
+        return
+    if u.drivername != 'sqlite' or not u.database:
+        return
+    import sqlite3
+    from sqlite_db import ensure_receipt_llm_elapsed_column
+
+    conn = sqlite3.connect(u.database)
+    try:
+        ensure_receipt_llm_elapsed_column(conn)
+    finally:
+        conn.close()
+
+
 def create_app(config_class=Config):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
@@ -35,6 +54,8 @@ def create_app(config_class=Config):
     app.register_blueprint(item_table.bp)
     app.register_blueprint(auth_routes.bp)
     app.register_blueprint(insight.bp)
+
+    _ensure_sqlite_receipt_columns(app)
 
     return app
 

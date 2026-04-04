@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+import time
 import tempfile
 import traceback
 from config import Config
@@ -116,7 +117,7 @@ class ReceiptData(BaseModel):
     total_amount: float
 
 
-def scan_receipt_with_gemini(f_name: str) -> list:
+def scan_receipt_with_gemini(f_name: str):
     # Load the receipt image
     with open(f_name, "rb") as f:
         image_bytes = f.read()
@@ -125,10 +126,11 @@ def scan_receipt_with_gemini(f_name: str) -> list:
     prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format.
     If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
     For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
-```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","dm drogerie markt","Unknown"]```.
+```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","Yeme","dm drogerie markt","Unknown"]```.
     Make sure the sum of individual prices is equal to the total price!!!"""
 
     # 3. Call the model with Structured Output (JSON mode)
+    t0 = time.perf_counter()
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=[
@@ -140,10 +142,12 @@ def scan_receipt_with_gemini(f_name: str) -> list:
             "response_schema": ReceiptData,
         }
     )
+    llm_elapsed_seconds = time.perf_counter() - t0
 
     # 4. Access the parsed data directly
     print(f"{response.parsed=}")
-    return response.parsed
+    print(f"llm_elapsed_seconds={llm_elapsed_seconds:.3f}")
+    return response.parsed, llm_elapsed_seconds
 
 
 class Receipt:
@@ -157,7 +161,7 @@ class Receipt:
         # if not cached:
             # cache_receipt(self.raw_items, f_name)
 
-        self.receipt_info = scan_receipt_with_gemini(f_name)
+        self.receipt_info, self.llm_elapsed_seconds = scan_receipt_with_gemini(f_name)
 
         self.shop = self.receipt_info.shop_name
         self.shopping_date = self.receipt_info.date

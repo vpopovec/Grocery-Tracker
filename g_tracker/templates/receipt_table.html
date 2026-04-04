@@ -43,6 +43,16 @@
             },
           },
         },
+        { id: 'llm_s', name: 'LLM (s)', sort: {
+            compare: (a, b) => {
+              const x = parseFloat(a);
+              const y = parseFloat(b);
+              if (x > y) return 1;
+              if (y > x) return -1;
+              return 0;
+            },
+          },
+        },
         { id: 'items', name: 'Show' },
         { id: 'del', name: 'Delete' }
       ],
@@ -53,13 +63,14 @@
             shop: '{{ receipt.shop_name }}',
             total: '{{ receipt.total }}',
             date: '{{ receipt.shopping_date.strftime('%Y/%m/%d') }}',
+            llm_s: {% if receipt.llm_elapsed_seconds is not none %}'{{ "%.2f"|format(receipt.llm_elapsed_seconds) }}'{% else %}''{% endif %},
             items: gridjs.html(`<a href={{ url_for('item_table.items', receipt_id=receipt.receipt_id) }}><img class="svg-icon" src="/static/receipt.svg"/></a>`),
             del: gridjs.html(`<form method="post" action="{{ url_for('item_table.delete_receipt') }}" style="display:inline" onsubmit="return confirm('Delete this receipt and its items?');"><input type="hidden" name="receipt_id" value="{{ receipt.receipt_id }}" /><button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>`)
           },
         {% endfor %}
       ],
       search: {
-        selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
+        selector: (cell, rowIndex, cellIndex) => [0, 1, 3].includes(cellIndex) ? cell : null,
       },
       sort: true,
       pagination: true,
