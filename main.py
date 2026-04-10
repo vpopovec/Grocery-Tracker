@@ -10,7 +10,7 @@ from sqlite_db import Database
 from person import Person
 from pydantic import BaseModel
 from google import genai
-
+from flask import render_template, flash
 
 f_name = 'lidl_bj11.jpeg'
 db = Database()
@@ -130,19 +130,33 @@ def scan_receipt_with_gemini(f_name: str):
     Make sure the sum of individual prices is equal to the total price!!!"""
 
     # 3. Call the model with Structured Output (JSON mode)
-    t0 = time.perf_counter()
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            prompt,
-            {"inline_data": {"mime_type": "image/jpeg", "data": image_bytes}}
-        ],
-        config={
-            "response_mime_type": "application/json",
-            "response_schema": ReceiptData,
-        }
-    )
-    llm_elapsed_seconds = time.perf_counter() - t0
+    try:
+        t0 = time.perf_counter()
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                prompt,
+                {"inline_data": {"mime_type": "image/jpeg", "data": image_bytes}}
+            ],
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": ReceiptData,
+            }
+        )
+        llm_elapsed_seconds = time.perf_counter() - t0
+    except (genai.errors.ClientError, genai.errors.ServerError) as e:
+        if "RESOURCE_EXHAUSTED" in str(e):
+            print("Rate limit reached! You've used your 20 free daily requests.")
+            flash('Rate limit reached! You\'ve used your 20 free daily requests.')
+            # Handle the pause or alert the user here
+            return render_template("receipt.html")
+        # google.genai.errors.ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+        elif "UNAVAILABLE" in str(e):
+            print("Model is currently experiencing high demand. Please try again later.")
+            flash('Model is currently experiencing high demand. Please try again later.')
+            return render_template("receipt.html")
+        else:
+            print(f"An API error occurred: {traceback.format_exc()}")
 
     # 4. Access the parsed data directly
     print(f"{response.parsed=}")
@@ -219,9 +233,13 @@ class Receipt:
 
 
 def process_receipt_from_fpath(f_name: str) -> Receipt:
-    receipt = Receipt(f_name)
+    try:
+        receipt = Receipt(f_name)
+    except ValueError:
+        print('Could not parse receipt. Please try again.')
+        return None, "Could not parse receipt. Please try again."
     receipt.process_grocery_list_with_gemini(receipt.receipt_info.items)
-    return receipt
+    return receipt, "success"
 
 
 def save_receipt_to_db(receipt: Receipt, person_id: int, shrunk_f_name: str) -> int:

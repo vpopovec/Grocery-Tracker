@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS item (
     price real NOT NULL,
     amount real,
     name text NOT NULL,  -- don't forget to make the name SQL-safe
-	receipt_id integer,
+    macro_category text NOT NULL,
+    micro_category text NOT NULL,
+    receipt_id integer,
 	FOREIGN KEY (receipt_id) REFERENCES receipts (receipt_id)
 );
 

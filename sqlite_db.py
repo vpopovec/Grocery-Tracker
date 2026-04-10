@@ -64,11 +64,11 @@ class Database:
         # DELETE orphan items
         self.cur.execute('DELETE FROM item WHERE receipt_id NOT IN (SELECT receipt_id FROM receipt)')
 
-        sql = ''' INSERT INTO item(name, price, amount, receipt_id) VALUES(?,?,?,?) '''
+        sql = ''' INSERT INTO item(name, price, amount, macro_category, micro_category, receipt_id) VALUES(?,?,?,?,?,?) '''
         # Insert items into DB
         for item in receipt.grocery_list:
             print(item)
-            item_task = (item['name'], item['final_price'], item['amount'], receipt_id)
+            item_task = (item['name'], item['final_price'], item['amount'], item['macro_category'], item['micro_category'], receipt_id)
             self.cur.execute(sql, item_task)
 
         sql = ''' INSERT INTO scan(f_name, person_id, receipt_id) VALUES(?,?,?) '''

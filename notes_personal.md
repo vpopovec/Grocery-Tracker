@@ -5,6 +5,8 @@ Great starting point. What you already built is **much stronger than most “por
 
 Below I’ll structure this in layers: **from low-risk, high-ROI AI additions → more advanced agentic workflows**, and I’ll explicitly call out *what each idea demonstrates* from a portfolio/recruiter perspective.
 
+USE DARK BACKGROUND FOR CONTRAST (saves time and improves precision)
+
 ---
 
 ## 1. High-value AI extensions to your existing grocery app

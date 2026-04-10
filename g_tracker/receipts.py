@@ -23,11 +23,15 @@ def allowed_file(filename):
 
 def process_file(f_path, shrunk_f_name):
     person_id = int(current_user.get_id())
-    receipt = process_receipt_from_fpath(f_path)
-    # TODO: Save to db
-    receipt_id = save_receipt_to_db(receipt, person_id, shrunk_f_name)
-    # TODO: Add manual check by client
-    current_app.config['RECEIPT_ID'] = receipt_id
+    receipt, status_message = process_receipt_from_fpath(f_path)
+    if receipt:
+        # TODO: Save to db
+        receipt_id = save_receipt_to_db(receipt, person_id, shrunk_f_name)
+        # TODO: Add manual check by client
+        current_app.config['RECEIPT_ID'] = receipt_id
+    if not receipt:
+        flash(status_message)
+    return status_message
 
 
 # TODO: Check if gemini can work with skewed images
@@ -176,13 +180,13 @@ def index():
 
             shrinked_f_path = f"{deskewed_f_path.split('.')[0]}.jpeg"
 
-            process_file(deskewed_f_path, os.path.basename(shrinked_f_path))
+            status_message = process_file(deskewed_f_path, os.path.basename(shrinked_f_path))
+            if status_message == 'success':
+                # SHRINK IMAGE
+                shrink_image(deskewed_f_path)
+                if shrinked_f_path != deskewed_f_path:
+                    os.remove(deskewed_f_path)
 
-            # SHRINK IMAGE
-            shrink_image(deskewed_f_path)
-            if shrinked_f_path != deskewed_f_path:
-                os.remove(deskewed_f_path)
-
-            return redirect(url_for('item_table.items'))
+                return redirect(url_for('item_table.items'))
 
     return render_template("receipt.html")

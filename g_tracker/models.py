@@ -75,6 +75,8 @@ class Item(db.Model):
     price = db.Column(db.Float, nullable=False)
     amount = db.Column(db.Float)
     name = db.Column(db.Text, nullable=False)
+    macro_category = db.Column(db.Text, nullable=False)
+    micro_category = db.Column(db.Text, nullable=False)
     receipt_id = db.Column(db.Integer, db.ForeignKey("receipt.receipt_id"))
 
     def __repr__(self):
@@ -85,7 +87,9 @@ class Item(db.Model):
             'id': self.item_id,
             'price': self.price,
             'amount': self.amount,
-            'name': self.name
+            'name': self.name,
+            'macro_category': self.macro_category,
+            'micro_category': self.micro_category
         }
 
 
