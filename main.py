@@ -129,6 +129,7 @@ def scan_receipt_with_gemini(f_name: str):
 ```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","Yeme","dm drogerie markt","Unknown"]```.
     Make sure the sum of individual prices is equal to the total price!!!"""
 
+    status_message = 'success'
     # 3. Call the model with Structured Output (JSON mode)
     try:
         t0 = time.perf_counter()
@@ -146,22 +147,23 @@ def scan_receipt_with_gemini(f_name: str):
         llm_elapsed_seconds = time.perf_counter() - t0
     except (genai.errors.ClientError, genai.errors.ServerError) as e:
         if "RESOURCE_EXHAUSTED" in str(e):
-            print("Rate limit reached! You've used your 20 free daily requests.")
-            flash('Rate limit reached! You\'ve used your 20 free daily requests.')
+            status_message = "Rate limit reached! You've used your 20 free daily requests."
+            print(status_message)
             # Handle the pause or alert the user here
-            return render_template("receipt.html")
+            # return render_template("receipt.html")
         # google.genai.errors.ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
         elif "UNAVAILABLE" in str(e):
-            print("Model is currently experiencing high demand. Please try again later.")
-            flash('Model is currently experiencing high demand. Please try again later.')
-            return render_template("receipt.html")
+            status_message = "Model is currently experiencing high demand. Please try again later."
+            # return render_template("receipt.html")
         else:
             print(f"An API error occurred: {traceback.format_exc()}")
+            status_message = "An API error occurred"
+        return '', 0, status_message
 
     # 4. Access the parsed data directly
     print(f"{response.parsed=}")
     print(f"llm_elapsed_seconds={llm_elapsed_seconds:.3f}")
-    return response.parsed, llm_elapsed_seconds
+    return response.parsed, llm_elapsed_seconds, status_message
 
 
 class Receipt:
@@ -175,13 +177,14 @@ class Receipt:
         # if not cached:
             # cache_receipt(self.raw_items, f_name)
 
-        self.receipt_info, self.llm_elapsed_seconds = scan_receipt_with_gemini(f_name)
+        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_gemini(f_name)
 
-        self.shop = self.receipt_info.shop_name
-        self.shopping_date = self.receipt_info.date
-        print(f"GOT SHOP: {self.shop=}")
-        print(f'DATE OF SHOPPING {self.shopping_date=}')
-        self.grocery_list = []
+        if self.receipt_info:
+            self.shop = self.receipt_info.shop_name
+            self.shopping_date = self.receipt_info.date
+            print(f"GOT SHOP: {self.shop=}")
+            print(f'DATE OF SHOPPING {self.shopping_date=}')
+            self.grocery_list = []
 
     @property
     def total(self):
@@ -233,11 +236,10 @@ class Receipt:
 
 
 def process_receipt_from_fpath(f_name: str) -> Receipt:
-    try:
-        receipt = Receipt(f_name)
-    except ValueError:
-        print('Could not parse receipt. Please try again.')
-        return None, "Could not parse receipt. Please try again."
+    receipt = Receipt(f_name)
+    if receipt.status_message != 'success':
+        return None, receipt.status_message
+
     receipt.process_grocery_list_with_gemini(receipt.receipt_info.items)
     return receipt, "success"
 
