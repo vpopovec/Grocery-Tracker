@@ -4,6 +4,8 @@
 
 This is a Flask-based web application for tracking grocery receipts using OCR technology. The project has a solid foundation but needs improvements in security, code quality, documentation, and project structure.
 
+-> Add some light AI-agent to create insights into spending habits on the background when checking insights. 
+
 ---
 
 ## 🔴 Critical Security Issues

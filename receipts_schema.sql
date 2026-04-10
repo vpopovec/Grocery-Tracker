@@ -5,8 +5,9 @@ CREATE TABLE IF NOT EXISTS receipt (
 	shop_name text,
 	total real NOT NULL,
 	shopping_date datetime,
+	llm_elapsed_seconds real,
 	FOREIGN KEY (person_id) REFERENCES person (person_id)
-	UNIQUE(person_id, shop_name, shopping_date) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
+	UNIQUE(person_id, shop_name, shopping_date, total) ON CONFLICT REPLACE  -- ensure unique receipts for 1 person
 );
 
 -- items table
@@ -15,7 +16,9 @@ CREATE TABLE IF NOT EXISTS item (
     price real NOT NULL,
     amount real,
     name text NOT NULL,  -- don't forget to make the name SQL-safe
-	receipt_id integer,
+    macro_category text NOT NULL,
+    micro_category text NOT NULL,
+    receipt_id integer,
 	FOREIGN KEY (receipt_id) REFERENCES receipts (receipt_id)
 );
 
@@ -27,6 +30,19 @@ CREATE TABLE IF NOT EXISTS person (
     name text NOT NULL,
     password_hash text
 );
+
+-- password reset tokens (dev-only flow; token stored as SHA-256 hex)
+CREATE TABLE IF NOT EXISTS password_reset_token (
+    id integer PRIMARY KEY,
+    person_id integer NOT NULL,
+    token_hash text NOT NULL,
+    expires_at datetime NOT NULL,
+    used_at datetime,
+    FOREIGN KEY (person_id) REFERENCES person (person_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_password_reset_token_token_hash
+    ON password_reset_token (token_hash);
 
 -- scans table
 CREATE TABLE IF NOT EXISTS scan (

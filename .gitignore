@@ -10,6 +10,7 @@ ENV/
 .venv/
 
 # Database
+receipts.db
 *.db
 *.sqlite
 *.sqlite3
@@ -49,6 +50,9 @@ Thumbs.db
 *.tmp
 *.log
 notes.txt
+IMPROVEMENTS.md
+CHANGES_APPLIED.md
+notes_personal.md
 main (copy).py
 check_easyocr.py
 

@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, HiddenField
 from wtforms.validators import DataRequired, ValidationError, Email, EqualTo
 from g_tracker.models import Person
 
@@ -29,3 +29,16 @@ class RegistrationForm(FlaskForm):
         person = Person.query.filter_by(email=email.data).first()
         if person is not None:
             raise ValidationError('Please use a different email address')
+
+
+class ForgotPasswordForm(FlaskForm):
+    identifier = StringField('Username or email', validators=[DataRequired()])
+    submit = SubmitField('Request reset link')
+
+
+class ResetPasswordForm(FlaskForm):
+    token = HiddenField(validators=[DataRequired()])
+    password = PasswordField('New password', validators=[DataRequired()])
+    password2 = PasswordField(
+        'Repeat password', validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Set new password')

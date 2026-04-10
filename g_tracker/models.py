@@ -1,6 +1,9 @@
-from g_tracker import db, login
+from datetime import datetime
+
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from g_tracker import db, login
 
 
 class Receipt(db.Model):
@@ -10,6 +13,7 @@ class Receipt(db.Model):
     shop_name = db.Column(db.Text, index=True)
     total = db.Column(db.Float, nullable=False)
     shopping_date = db.Column(db.DateTime)
+    llm_elapsed_seconds = db.Column(db.Float, nullable=True)
     person = db.relationship("Person", backref="receipt")
     # Delete items on deletion of receipt (not on replace, leider)
     items = db.relationship("Item", backref="receipt", cascade="all, delete-orphan")
@@ -18,7 +22,7 @@ class Receipt(db.Model):
 
     # ensure unique receipts for 1 person
     __table_args__ = (
-        db.UniqueConstraint('person_id', 'shopping_date', name='_person_shopping_date_uc'),
+        db.UniqueConstraint('person_id', 'shop_name', 'shopping_date', 'total', name='_person_shopping_date_uc'),
     )
 
     def __repr__(self):
@@ -46,6 +50,20 @@ class Person(UserMixin, db.Model):
         return f"<Person {self.username}, nickname {self.name}>"
 
 
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_token'
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.person_id'), nullable=False)
+    token_hash = db.Column(db.String(64), nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+
+    def is_valid(self) -> bool:
+        if self.used_at is not None:
+            return False
+        return datetime.utcnow() < self.expires_at
+
+
 @login.user_loader
 def load_user(person_id):
     return Person.query.get(int(person_id))
@@ -57,6 +75,8 @@ class Item(db.Model):
     price = db.Column(db.Float, nullable=False)
     amount = db.Column(db.Float)
     name = db.Column(db.Text, nullable=False)
+    macro_category = db.Column(db.Text, nullable=False)
+    micro_category = db.Column(db.Text, nullable=False)
     receipt_id = db.Column(db.Integer, db.ForeignKey("receipt.receipt_id"))
 
     def __repr__(self):
@@ -67,7 +87,9 @@ class Item(db.Model):
             'id': self.item_id,
             'price': self.price,
             'amount': self.amount,
-            'name': self.name
+            'name': self.name,
+            'macro_category': self.macro_category,
+            'micro_category': self.micro_category
         }
 
 

@@ -10,7 +10,7 @@ from skimage.color import rgb2gray
 from deskew import determine_skew
 import cv2
 import os
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 bp = Blueprint('receipt', __name__)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}  # HEIC files aren't supported yet
@@ -23,11 +23,15 @@ def allowed_file(filename):
 
 def process_file(f_path, shrunk_f_name):
     person_id = int(current_user.get_id())
-    receipt = process_receipt_from_fpath(f_path)
-    # TODO: Save to db
-    receipt_id = save_receipt_to_db(receipt, person_id, shrunk_f_name)
-    # TODO: Add manual check by client
-    current_app.config['RECEIPT_ID'] = receipt_id
+    receipt, status_message = process_receipt_from_fpath(f_path)
+    if receipt:
+        # TODO: Save to db
+        receipt_id = save_receipt_to_db(receipt, person_id, shrunk_f_name)
+        # TODO: Add manual check by client
+        current_app.config['RECEIPT_ID'] = receipt_id
+    if not receipt:
+        flash(status_message)
+    return status_message
 
 
 # TODO: Check if gemini can work with skewed images
@@ -120,15 +124,15 @@ def straighten_img(f_path):
 
 def shrink_image(f_path):
     jpeg_f_path = f"{f_path.split('.')[0]}.jpeg"
-    foo = Image.open(f_path)
+    foo = ImageOps.exif_transpose(Image.open(f_path))
     foo.save(jpeg_f_path, optimize=True, quality=10)
 
 
 def preprocess_image_for_upload(f_path, max_dim=2000):
     # img = Image.open(io.BytesIO(image_bytes))
-    img = Image.open(f_path)
+    img = ImageOps.exif_transpose(Image.open(f_path))
 
-    # 1. Standardize Orientation (Fixes upside-down uploads)
+    # 1. Standardize color (EXIF orientation already baked into pixels above)
     img = img.convert("RGB")
     
     # 2. Resize while maintaining aspect ratio
@@ -176,13 +180,13 @@ def index():
 
             shrinked_f_path = f"{deskewed_f_path.split('.')[0]}.jpeg"
 
-            process_file(deskewed_f_path, os.path.basename(shrinked_f_path))
+            status_message = process_file(deskewed_f_path, os.path.basename(shrinked_f_path))
+            if status_message == 'success':
+                # SHRINK IMAGE
+                shrink_image(deskewed_f_path)
+                if shrinked_f_path != deskewed_f_path:
+                    os.remove(deskewed_f_path)
 
-            # SHRINK IMAGE
-            shrink_image(deskewed_f_path)
-            if shrinked_f_path != deskewed_f_path:
-                os.remove(deskewed_f_path)
-
-            return redirect(url_for('item_table.items'))
+                return redirect(url_for('item_table.items'))
 
     return render_template("receipt.html")
