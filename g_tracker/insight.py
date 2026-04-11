@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, flash, current_app
+from flask import Blueprint, request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, db
@@ -92,6 +92,31 @@ def create_graphs():
     category_chart.save(f'{static_path}category_breakdown.png')
 
 
+
+@bp.route('/ask-ai', methods=['POST'])
+@login_required
+def ask_ai():
+    # 'request' is used to get the JSON sent by the JS fetch()
+    data = request.get_json()
+    user_message = data.get('message')
+
+    if not user_message:
+        return jsonify({"reply": "I didn't catch that. Could you repeat?"}), 400
+
+    try:
+        # Call your Groq/Gemini/Local function here
+        response_text = ai_financial_agent(user_message)
+        
+        # Temporary mock response for testing
+        # response_text = f"You asked about: '{user_message}'. I'm currently analyzing your receipts!"
+        
+        return jsonify({"reply": response_text})
+    
+    except Exception as e:
+        print(f"Error in AI route: {traceback.format_exc()}")
+        return jsonify({"reply": "Sorry, I'm having trouble thinking right now."}), 500
+
+
 @bp.route("/insight", methods=["GET", "POST"])
 @login_required
 def index():
@@ -105,11 +130,6 @@ def index():
     weekly_fn = f"static/graphs/{person_id}/weekly_spending.png"
     monthly_fn = f"static/graphs/{person_id}/monthly_spending.png"
     macro_category_fn = f"static/graphs/{person_id}/category_breakdown.png"
-
-
-    user_question = "Kolko som minul za vajcia tento a minuly mesiac?"
-    groq_resp = ai_financial_agent(user_question)
-    print(f"{groq_resp=}")
 
     return render_template("insight.html", spent=get_total_spent(), weekly=weekly_fn, monthly=monthly_fn, macro_category=macro_category_fn)
 
@@ -127,7 +147,7 @@ def ai_financial_agent(user_question):
     ).join(Item).filter(Receipt.person_id == person_id).group_by('month', Item.macro_category, Item.micro_category).all()
 
     # 2. Format data into a "Data Table" for the AI
-    data_context = "User Spending Data (Monthly Breakdown):\n| Month | Category | Subcategory | Total |\n|---|---|---|\n"
+    data_context = "User Spending Data (Monthly Breakdown):\n| Month | Category | Subcategory | Total |\n|---|---|---|---|\n"
     for month, cat, sub_cat, total in raw_data:
         data_context += f"| {month} | {cat} | {sub_cat} | {total:.2f} EUR |\n"
 
@@ -135,7 +155,7 @@ def ai_financial_agent(user_question):
 
     # 3. Create the System Prompt
     system_prompt = f"""
-    You are 'SpendWise AI', a personal finance assistant.
+    You are 'Receipt Buddy', a personal finance assistant.
     Today's Date: {datetime.now().strftime('%Y-%m-%d')}
     
     CONTEXT DATA:

@@ -11,6 +11,13 @@ from person import Person
 from pydantic import BaseModel
 from google import genai
 from flask import render_template, flash
+from openai import OpenAI
+
+# OpenRouter setup
+client_openrouter = OpenAI(
+  base_url="https://openrouter.ai/api/v1",
+  api_key=Config.OPENROUTER_API_KEY
+)
 
 f_name = 'lidl_bj11.jpeg'
 db = Database()
@@ -117,6 +124,72 @@ class ReceiptData(BaseModel):
     total_amount: float
 
 
+def scan_receipt_with_qwen(f_name: str):
+    # Load the receipt image
+    with open(f_name, "rb") as f:
+        image_bytes = f.read()
+
+    # leads to errors: If an individual item is a discount (negative final_price), then subtract this price from the item above if possible (item price will stay positive), otherwise keep the discount as separate item.
+    prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format.
+    If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
+    For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
+```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","Yeme","dm drogerie markt","Unknown"]```.
+    There can be two standalone "items" represnting discount for one item. 
+    Make sure the sum of individual prices is equal to the total price!!!"""
+
+    status_message = 'success'
+    # 3. Call the model with Structured Output (JSON mode)
+    try:
+        t0 = time.perf_counter()
+        completion = client_openrouter.chat.completions.create(
+            # Use the specific Qwen 2.5 VL 72B model for high accuracy
+            model="qwen/qwen3.5-flash-02-23", # "qwen/qwen2.5-vl-72b-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"{prompt}. Return schema {ReceiptData}"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            # OpenRouter helps format the response
+            response_format=ReceiptData # {"type": "json_object"}
+        )
+        response = completion.choices[0].message.content
+        # response = client.models.generate_content(
+        #     model="gemini-2.5-flash",
+        #     contents=[
+        #         prompt,
+        #         {"inline_data": {"mime_type": "image/jpeg", "data": image_bytes}}
+        #     ],
+        #     config={
+        #         "response_mime_type": "application/json",
+        #         "response_schema": ReceiptData,
+        #     }
+        # )
+        llm_elapsed_seconds = time.perf_counter() - t0
+    except Exception as e:
+        if "RESOURCE_EXHAUSTED" in str(e):
+            status_message = "Rate limit reached! You've used your 20 free daily requests."
+            print(status_message)
+            # Handle the pause or alert the user here
+            # return render_template("receipt.html")
+        # google.genai.errors.ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
+        elif "UNAVAILABLE" in str(e):
+            status_message = "Model is currently experiencing high demand. Please try again later."
+            # return render_template("receipt.html")
+        else:
+            print(f"An API error occurred: {traceback.format_exc()}")
+            status_message = "An API error occurred"
+        return '', 0, status_message
+
+    # 4. Access the parsed data directly
+    print(f"{response=}")
+    print(f"llm_elapsed_seconds={llm_elapsed_seconds:.3f}")
+    return response, llm_elapsed_seconds, status_message
+
+
 def scan_receipt_with_gemini(f_name: str):
     # Load the receipt image
     with open(f_name, "rb") as f:
@@ -127,6 +200,7 @@ def scan_receipt_with_gemini(f_name: str):
     If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
     For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
 ```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","Yeme","dm drogerie markt","Unknown"]```.
+    There can be two standalone "items" represnting discount for one item. 
     Make sure the sum of individual prices is equal to the total price!!!"""
 
     status_message = 'success'

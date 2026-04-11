@@ -9,6 +9,7 @@ def _env_bool(name: str, default: str = '') -> bool:
 class Config(object):
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
     GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+    OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'
     ENABLE_DEV_PASSWORD_RESET = _env_bool('ENABLE_DEV_PASSWORD_RESET')
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(base_dir, 'receipts')

@@ -1,29 +1,172 @@
 {% extends "layout.html" %}
 
 {% block title %}
-
+    Spending Insights
 {% endblock %}
 
 {% block main %}
-    <div class="mb-3">
-        <h3 class="mb-3" id="welcome-title">
-            Insights into your spending
-        </h3>
-        <div class="container">
-            <div class="row">
-                <figure class="col-sm">
-                    <p><img class="" src="{{ weekly }}" alt="Weekly spending">
-                    <figcaption>Weekly spending</figcaption><p>
-                </figure>
-                <figure class="col-sm">
-                    <p><img class="" src="{{ monthly }}" alt="Monthly spending">
-                    <figcaption>Monthly spending</figcaption><p>
-                </figure>
-                <figure class="col-sm">
-                    <p><img class="" src="{{ macro_category }}" alt="Macro category spending">
-                    <figcaption>Macro category spending</figcaption><p>
-                </figure>
+<div class="container-fluid py-4">
+    <div class="mb-4 text-center">
+        <h3 id="welcome-title">Insights into your spending</h3>
+        <p class="text-muted">Visualizing your habits and AI-powered analysis.</p>
+    </div>
+
+    <div class="row mb-5 justify-content-center">
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <img class="img-fluid rounded mb-2" src="{{ weekly }}" alt="Weekly spending">
+                    <h6 class="text-secondary mt-2">Weekly Spending</h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <img class="img-fluid rounded mb-2" src="{{ monthly }}" alt="Monthly spending">
+                    <h6 class="text-secondary mt-2">Monthly Spending</h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <img class="img-fluid rounded mb-2" src="{{ macro_category }}" alt="Category breakdown">
+                    <h6 class="text-secondary mt-2">Macro Category Spending</h6>
+                </div>
             </div>
         </div>
     </div>
+</div>
+
+<div id="chat-wrapper" class="shadow-lg border">
+    <div id="chat-header" class="bg-dark text-white p-3 d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-robot me-2"></i>Receipt Buddy</span>
+        <button id="toggle-chat" class="btn btn-sm btn-outline-light" onclick="toggleChat()">—</button>
+    </div>
+    
+    <div id="chat-container">
+        <div id="chat-body" class="p-3 bg-light" style="height: 350px; overflow-y: auto;">
+            <div class="bot-message mb-3">
+                <div class="d-flex flex-column align-items-start">
+                    <span class="badge bg-secondary mb-1">AI Assistant</span>
+                    <div class="bg-white p-3 rounded shadow-sm border" style="max-width: 85%;">
+                        Hello! I'm ready to analyze your receipts. You can ask me things like "How much did I spend on coffee this month?"
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="typing-indicator" class="px-3 py-1 d-none">
+            <small class="text-muted italic">AI is thinking...</small>
+        </div>
+
+        <div id="chat-footer" class="p-3 bg-white border-top">
+            <div class="input-group">
+                <input type="text" id="user-input" class="form-control" placeholder="Ask a question..." onkeypress="handleKeyPress(event)">
+                <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">
+                    <i class="bi bi-send"></i> Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #chat-wrapper {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        width: 380px;
+        z-index: 1050;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: transform 0.3s ease;
+    }
+    
+    #chat-body::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    #chat-body::-webkit-scrollbar-thumb {
+        background-color: #cbd5e0;
+        border-radius: 10px;
+    }
+
+    .user-message .msg-content {
+        background-color: #007bff;
+        color: white;
+        border-bottom-right-radius: 0 !important;
+    }
+
+    .bot-message .msg-content {
+        background-color: #ffffff;
+        border-bottom-left-radius: 0 !important;
+    }
+</style>
+
+<script>
+    const chatBody = document.getElementById('chat-body');
+    const userInput = document.getElementById('user-input');
+    const typingIndicator = document.getElementById('typing-indicator');
+
+    function handleKeyPress(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+
+    function toggleChat() {
+        const container = document.getElementById('chat-container');
+        const btn = document.getElementById('toggle-chat');
+        if (container.style.display === "none") {
+            container.style.display = "block";
+            btn.innerText = "—";
+        } else {
+            container.style.display = "none";
+            btn.innerText = "+";
+        }
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        // 1. Append User Message
+        appendMessage('You', text, 'user-message align-items-end');
+        userInput.value = '';
+        chatBody.scrollTop = chatBody.scrollHeight;
+
+        // 2. Show Typing Indicator
+        typingIndicator.classList.remove('d-none');
+
+        try {
+            // 3. Fetch from Flask
+            const response = await fetch('/ask-ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+            });
+            const data = await response.json();
+
+            // 4. Append AI Message
+            appendMessage('AI Assistant', data.reply, 'bot-message align-items-start');
+        } catch (error) {
+            appendMessage('System', 'Connection error. Check backend.', 'bot-message');
+        } finally {
+            typingIndicator.classList.add('d-none');
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+    }
+
+    function appendMessage(sender, text, classes) {
+        const badgeClass = sender === 'You' ? 'bg-primary' : 'bg-secondary';
+        const msgHtml = `
+            <div class="d-flex flex-column ${classes} mb-3">
+                <span class="badge ${badgeClass} mb-1">${sender}</span>
+                <div class="msg-content p-3 rounded shadow-sm border" style="max-width: 85%;">
+                    ${text}
+                </div>
+            </div>`;
+        chatBody.innerHTML += msgHtml;
+    }
+</script>
 {% endblock %}
