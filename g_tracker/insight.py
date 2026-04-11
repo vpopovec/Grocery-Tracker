@@ -7,9 +7,13 @@ from g_tracker.item_table import get_receipts
 import altair as alt
 import pandas as pd
 from pathlib import Path
+from datetime import datetime
+from groq import Groq
+from config import Config
 
 bp = Blueprint('insight', __name__)
 # to_utc = lambda dt: dt.replace(' ', 'T') + "Z"
+client = Groq(api_key=Config.GROQ_API_KEY)
 
 
 def get_total_spent():
@@ -102,4 +106,59 @@ def index():
     monthly_fn = f"static/graphs/{person_id}/monthly_spending.png"
     macro_category_fn = f"static/graphs/{person_id}/category_breakdown.png"
 
+
+    user_question = "Kolko som minul za vajcia tento a minuly mesiac?"
+    groq_resp = ai_financial_agent(user_question)
+    print(f"{groq_resp=}")
+
     return render_template("insight.html", spent=get_total_spent(), weekly=weekly_fn, monthly=monthly_fn, macro_category=macro_category_fn)
+
+
+def ai_financial_agent(user_question):
+    person_id = int(current_user.get_id())
+    
+    # 1. Fetch relevant context from SQLite
+    # We get monthly totals for the last 3 months to help with "trends"
+    raw_data = db.session.query(
+        func.strftime('%Y-%m', Receipt.shopping_date).label('month'),
+        Item.macro_category,
+        Item.micro_category,
+        func.sum(Item.price).label('total')
+    ).join(Item).filter(Receipt.person_id == person_id).group_by('month', Item.macro_category, Item.micro_category).all()
+
+    # 2. Format data into a "Data Table" for the AI
+    data_context = "User Spending Data (Monthly Breakdown):\n| Month | Category | Subcategory | Total |\n|---|---|---|\n"
+    for month, cat, sub_cat, total in raw_data:
+        data_context += f"| {month} | {cat} | {sub_cat} | {total:.2f} EUR |\n"
+
+    print(f"{data_context=}")
+
+    # 3. Create the System Prompt
+    system_prompt = f"""
+    You are 'SpendWise AI', a personal finance assistant.
+    Today's Date: {datetime.now().strftime('%Y-%m-%d')}
+    
+    CONTEXT DATA:
+    {data_context}
+
+    INSTRUCTIONS:
+    1. Answer the user's question using the data provided in local language.
+    2. If asked for a prediction, calculate a simple linear trend based on the monthly data.
+    3. Be proactive: if you notice a category like 'Alcohol' or 'Eating Out' increasing, mention it.
+    4. Keep the tone helpful, professional, and concise. Use user's local language.
+    """
+    print(system_prompt)
+
+    # 4. Call Groq
+    completion = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_question}
+        ],
+        temperature=0.7, # Adds a bit of 'personality'
+        max_tokens=500
+    )
+
+    return completion.choices[0].message.content
+

@@ -26,6 +26,7 @@ dependencies = [
     "pytest>=7.4.0",
     "google-genai>=1.47.0",
     "pydantic>=2.12.5",
+    #"groq>=1.1.2",
 ]
 
 [project.scripts]
