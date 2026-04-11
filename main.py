@@ -4,6 +4,7 @@ import subprocess
 import time
 import tempfile
 import traceback
+import base64
 from config import Config
 from helpers import *
 from sqlite_db import Database
@@ -128,51 +129,75 @@ def scan_receipt_with_qwen(f_name: str):
     # Load the receipt image
     with open(f_name, "rb") as f:
         image_bytes = f.read()
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
-    # leads to errors: If an individual item is a discount (negative final_price), then subtract this price from the item above if possible (item price will stay positive), otherwise keep the discount as separate item.
-    prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format.
-    If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
-    For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
-```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","Yeme","dm drogerie markt","Unknown"]```.
-    There can be two standalone "items" represnting discount for one item. 
-    Make sure the sum of individual prices is equal to the total price!!!"""
+    prompt_xml = f"""### ROLE
+You are a precise Slovak financial data extraction expert.
 
+### TASK
+Extract structured data from the provided Slovak receipt image/text. 
+Ensure 100% mathematical consistency and follow the taxonomy rules strictly.
+
+### EXTRACTION RULES
+1. **Discounts**:
+   - If a negative price line (discount) follows an item, subtract it from that item's price.
+   - If multiple discount lines follow one item, sum them all into that single item's price.
+   - Do NOT create separate "item" entries for discounts unless they are general "Zľava na nákup" (Total bill discount).
+2. **Categories**:
+   - For every item, assign a `macro_category` and `micro_category` based ONLY on the provided taxonomy.
+   - Taxonomy: {slovak_taxonomy}
+3. **Shop Names**:
+   - Normalize `shop_name` to exactly one of: ["Lidl", "Kaufland", "Tesco", "Billa", "Coop Jednota", "Metro", "Yeme", "dm drogerie markt", "Unknown"].
+4. **Math Verification**:
+   - STEP 1: Sum all extracted item `total_price` values.
+   - STEP 2: Compare to the extracted `total_amount`.
+   - STEP 3: If they do not match, re-examine the lines for missed discounts or quantities.
+
+### SCHEMA
+Output only a JSON object matching this structure:
+{{
+    "shop_name": string,
+    "date": "YYYY-MM-DD",
+    "items": [
+        {{
+            "name": string,
+            "quantity": float,
+            "unit_price": float,
+            "total_price": float,
+            "macro_category": string,
+            "micro_category": string
+        }}
+    ],
+    "total_amount": float
+}}"""
+    print(f"PROMPT: {prompt}")
     status_message = 'success'
     # 3. Call the model with Structured Output (JSON mode)
     try:
         t0 = time.perf_counter()
-        completion = client_openrouter.chat.completions.create(
+        # completion = client_openrouter.chat.completions.create(
+        completion = client_openrouter.beta.chat.completions.parse(
             # Use the specific Qwen 2.5 VL 72B model for high accuracy
             model="qwen/qwen3.5-flash-02-23", # "qwen/qwen2.5-vl-72b-instruct",
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"{prompt}. Return schema {ReceiptData}"},
+                        {"type": "text", "text": prompt_xml},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                     ]
                 }
             ],
             # OpenRouter helps format the response
+            # response_format={"type": "json_object"}
             response_format=ReceiptData # {"type": "json_object"}
         )
-        response = completion.choices[0].message.content
-        # response = client.models.generate_content(
-        #     model="gemini-2.5-flash",
-        #     contents=[
-        #         prompt,
-        #         {"inline_data": {"mime_type": "image/jpeg", "data": image_bytes}}
-        #     ],
-        #     config={
-        #         "response_mime_type": "application/json",
-        #         "response_schema": ReceiptData,
-        #     }
-        # )
+        response = json.loads(completion.choices[0].message.content)
         llm_elapsed_seconds = time.perf_counter() - t0
     except Exception as e:
         if "RESOURCE_EXHAUSTED" in str(e):
             status_message = "Rate limit reached! You've used your 20 free daily requests."
-            print(status_message)
+            print(status_message, f"{e=}")
             # Handle the pause or alert the user here
             # return render_template("receipt.html")
         # google.genai.errors.ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}
@@ -251,11 +276,12 @@ class Receipt:
         # if not cached:
             # cache_receipt(self.raw_items, f_name)
 
-        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_gemini(f_name)
+        # self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_gemini(f_name)
+        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_qwen(f_name)
 
         if self.receipt_info:
-            self.shop = self.receipt_info.shop_name
-            self.shopping_date = self.receipt_info.date
+            self.shop = self.receipt_info['shop_name']
+            self.shopping_date = self.receipt_info['date']
             print(f"GOT SHOP: {self.shop=}")
             print(f'DATE OF SHOPPING {self.shopping_date=}')
             self.grocery_list = []
@@ -265,15 +291,15 @@ class Receipt:
         return round(sum([i['final_price'] for i in self.grocery_list]), 2)
 
 
-    def process_grocery_list_with_gemini(self, items):
+    def process_grocery_list(self, items):
         for item in items:
             self.grocery_list.append(
                 {
-                    "name": item.name,
-                    "amount": item.quantity,
-                    "final_price": item.total_price,
-                    "macro_category": item.macro_category,
-                    "micro_category": item.micro_category,
+                    "name": item['name'],
+                    "amount": item['quantity'],
+                    "final_price": item['total_price'],
+                    "macro_category": item['macro_category'],
+                    "micro_category": item['micro_category'],
                 }
             )
 
@@ -314,7 +340,7 @@ def process_receipt_from_fpath(f_name: str) -> Receipt:
     if receipt.status_message != 'success':
         return None, receipt.status_message
 
-    receipt.process_grocery_list_with_gemini(receipt.receipt_info.items)
+    receipt.process_grocery_list(receipt.receipt_info['items'])
     return receipt, "success"
 
 
