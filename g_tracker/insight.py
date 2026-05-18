@@ -11,6 +11,8 @@ from datetime import datetime
 from groq import Groq
 from config import Config
 
+FRESH_FOOD_MACRO = "Čerstvé potraviny"
+
 bp = Blueprint('insight', __name__)
 # to_utc = lambda dt: dt.replace(' ', 'T') + "Z"
 client = Groq(api_key=Config.GROQ_API_KEY)
@@ -91,6 +93,84 @@ def create_graphs():
 
     category_chart.save(f'{static_path}category_breakdown.png')
 
+    # --- Macro drill-down: Čerstvé potraviny (micro categories), current vs previous month ---
+    now = datetime.now()
+    start_current = datetime(now.year, now.month, 1)
+    start_next = (
+        datetime(now.year + 1, 1, 1)
+        if now.month == 12
+        else datetime(now.year, now.month + 1, 1)
+    )
+    start_last = (
+        datetime(now.year - 1, 12, 1)
+        if now.month == 1
+        else datetime(now.year, now.month - 1, 1)
+    )
+
+    def _fresh_food_drill_df(range_start, range_end_excl):
+        rows = db.session.query(
+            Item.micro_category,
+            func.sum(Item.price).label("total_price"),
+        ).join(Receipt, Item.receipt_id == Receipt.receipt_id).filter(
+            Receipt.person_id == person_id,
+            Item.macro_category == FRESH_FOOD_MACRO,
+            Receipt.shopping_date >= range_start,
+            Receipt.shopping_date < range_end_excl,
+        ).group_by(Item.micro_category).all()
+        return pd.DataFrame(rows, columns=["subcategory", "total"])
+
+    df_fresh_current = _fresh_food_drill_df(start_current, start_next)
+    df_fresh_last = _fresh_food_drill_df(start_last, start_current)
+
+    all_micro = sorted(
+        set(
+            df_fresh_current["subcategory"].dropna().tolist()
+            + df_fresh_last["subcategory"].dropna().tolist()
+        )
+    )
+
+    def _fresh_food_donut(df, title):
+        if df.empty or df["total"].sum() == 0:
+            return (
+                alt.Chart(
+                    pd.DataFrame({"label": ["No spending in this period"]})
+                )
+                .mark_text(fontSize=13, align="center")
+                .encode(text="label:N")
+                .properties(width=300, height=300, title=title)
+            )
+        color = alt.Color(
+            "subcategory:N",
+            title="Subcategory",
+            scale=alt.Scale(domain=all_micro, scheme="category20"),
+        )
+        return (
+            alt.Chart(df)
+            .mark_arc(innerRadius=50)
+            .encode(
+                theta=alt.Theta(field="total", type="quantitative"),
+                color=color,
+                tooltip=["subcategory", "total"],
+            )
+            .properties(width=300, height=300, title=title)
+        )
+
+    label_current = start_current.strftime("%B %Y")
+    label_last = start_last.strftime("%B %Y")
+    fresh_food_drill_chart = (
+        alt.hconcat(
+            _fresh_food_donut(df_fresh_current, f"Current month ({label_current})"),
+            _fresh_food_donut(df_fresh_last, f"Last month ({label_last})"),
+            spacing=24,
+        )
+        .properties(
+            title=alt.TitleParams(
+                text='Macro Category Drill-Down — Čerstvé potraviny (Fresh Food)',
+                anchor="middle",
+            )
+        )
+    )
+    fresh_food_drill_chart.save(f"{static_path}fresh_food_drilldown.png")
 
 
 @bp.route('/ask-ai', methods=['POST'])
@@ -130,8 +210,16 @@ def index():
     weekly_fn = f"static/graphs/{person_id}/weekly_spending.png"
     monthly_fn = f"static/graphs/{person_id}/monthly_spending.png"
     macro_category_fn = f"static/graphs/{person_id}/category_breakdown.png"
+    fresh_food_fn = f"static/graphs/{person_id}/fresh_food_drilldown.png"
 
-    return render_template("insight.html", spent=get_total_spent(), weekly=weekly_fn, monthly=monthly_fn, macro_category=macro_category_fn)
+    return render_template(
+        "insight.html",
+        spent=get_total_spent(),
+        weekly=weekly_fn,
+        monthly=monthly_fn,
+        macro_category=macro_category_fn,
+        fresh_food_drilldown=fresh_food_fn,
+    )
 
 
 def ai_financial_agent(user_question):

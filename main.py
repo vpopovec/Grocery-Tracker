@@ -125,7 +125,7 @@ class ReceiptData(BaseModel):
     total_amount: float
 
 
-def scan_receipt_with_qwen(f_name: str):
+def scan_receipt_with_openrouter(f_name: str):
     # Load the receipt image
     with open(f_name, "rb") as f:
         image_bytes = f.read()
@@ -170,7 +170,7 @@ Output only a JSON object matching this structure:
     ],
     "total_amount": float
 }}"""
-    print(f"PROMPT: {prompt}")
+
     status_message = 'success'
     # 3. Call the model with Structured Output (JSON mode)
     try:
@@ -178,7 +178,8 @@ Output only a JSON object matching this structure:
         # completion = client_openrouter.chat.completions.create(
         completion = client_openrouter.beta.chat.completions.parse(
             # Use the specific Qwen 2.5 VL 72B model for high accuracy
-            model="qwen/qwen3.5-flash-02-23", # "qwen/qwen2.5-vl-72b-instruct",
+            model= "google/gemini-3.1-flash-lite", # <3 -> "google/gemini-3-flash-preview", 
+            # WEAK MODELS "openai/gpt-4o",  # "qwen/qwen3.5-flash-02-23", # "qwen/qwen2.5-vl-72b-instruct",
             messages=[
                 {
                     "role": "user",
@@ -189,8 +190,7 @@ Output only a JSON object matching this structure:
                 }
             ],
             # OpenRouter helps format the response
-            # response_format={"type": "json_object"}
-            response_format=ReceiptData # {"type": "json_object"}
+            response_format=ReceiptData,  # {"type": "json_object"}
         )
         response = json.loads(completion.choices[0].message.content)
         llm_elapsed_seconds = time.perf_counter() - t0
@@ -215,7 +215,7 @@ Output only a JSON object matching this structure:
     return response, llm_elapsed_seconds, status_message
 
 
-def scan_receipt_with_gemini(f_name: str):
+def scan_receipt_with_google(f_name: str):
     # Load the receipt image
     with open(f_name, "rb") as f:
         image_bytes = f.read()
@@ -276,8 +276,8 @@ class Receipt:
         # if not cached:
             # cache_receipt(self.raw_items, f_name)
 
-        # self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_gemini(f_name)
-        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_qwen(f_name)
+        # self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_google(f_name)
+        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_openrouter(f_name)
 
         if self.receipt_info:
             self.shop = self.receipt_info['shop_name']

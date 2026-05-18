@@ -6,7 +6,7 @@ from pydantic import BaseModel
 # Ensure your ReceiptData schema is imported for the structured output
 # from .models import ReceiptData
 
-tst_img_path = '/home/viliam/Downloads/203c694c-eed9-4f3d-b955-5c5b905dfdee_processed.jpg' #IMG_0905_problematic.jpeg'
+tst_img_path = '/home/viliam/Downloads/cdc48c94-3144-4537-bccb-61ab0e28d2bd_processed.jpeg' #IMG_0905_problematic.jpeg'
 # tst_img_path = '/home/viliam/Downloads/IMG_0913.jpeg'
 
 class ReceiptItem(BaseModel):
@@ -134,7 +134,7 @@ from openai import OpenAI
 # OpenRouter setup
 client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
-  api_key="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",# os.environ.get("OPENROUTER_API_KEY"),
+  api_key=os.environ.get("OPENROUTER_API_KEY"),
 )
 
 def ocr_receipt_with_qwen_openrouter(image_bytes):
@@ -181,7 +181,7 @@ Ensure 100% mathematical consistency and follow the taxonomy rules strictly.
 4. **Math Verification**:
    - STEP 1: Sum all extracted item `total_price` values.
    - STEP 2: Compare to the extracted `total_amount`.
-   - STEP 3: If they do not match, re-examine the lines for missed discounts or quantities.
+   - STEP 3: If they do not match, re-examine the lines for missed discounts or quantities!!!
 
 ### SCHEMA
 Output only a JSON object matching this structure:
