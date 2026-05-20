@@ -188,15 +188,45 @@ edited_df = st.data_editor(
 )
 
 if st.button("Save Changes"):
-    # Convert bools back to integers
+    # Convert bools back to integers safely
     edited_df['is_personal'] = edited_df['is_personal'].fillna(False).astype(int)
-    
-    # Hardcoded to 1 for local POC, match with your current user system later
     edited_df['person_id'] = 1
     
     with get_db_connection() as conn:
-        conn.execute("DELETE FROM budget_categories")
-        edited_df.to_sql("budget_categories", conn, if_exists="append", index=False)
+        # 1. Collect all valid IDs currently inside the Streamlit editor dataframe
+        # (New rows won't have an ID or it will be NaN)
+        valid_ids = edited_df['id'].dropna().astype(int).tolist()
+        
+        # 2. Delete any categories from the database that the user removed in the editor
+        if valid_ids:
+            placeholders = ",".join(["?"] * len(valid_ids))
+            conn.execute(f"DELETE FROM budget_categories WHERE id NOT IN ({placeholders})", valid_ids)
+        else:
+            # If the dataframe is completely empty, wipe the table
+            conn.execute("DELETE FROM budget_categories")
+            
+        # 3. Step through rows and Upsert them individually
+        for _, row in edited_df.iterrows():
+            category_id = row.get('id')
+            
+            # Handle empty monthly limits safely for SQLite (NaN -> None)
+            limit = None if pd.isna(row['monthly_limit']) else float(row['monthly_limit'])
+            
+            if pd.isna(category_id):
+                # This is a brand new row added via the "+" button
+                conn.execute("""
+                    INSERT INTO budget_categories (category_name, is_personal, monthly_limit, person_id)
+                    VALUES (?, ?, ?, ?)
+                """, (row['category_name'], row['is_personal'], limit, row['person_id']))
+            else:
+                # This is an existing row -> Update it!
+                conn.execute("""
+                    UPDATE budget_categories 
+                    SET category_name = ?, is_personal = ?, monthly_limit = ?, person_id = ?
+                    WHERE id = ?
+                """, (row['category_name'], row['is_personal'], limit, row['person_id'], int(category_id)))
+                
         conn.commit()
+        
     st.success("Configurations successfully updated!")
     st.rerun()
