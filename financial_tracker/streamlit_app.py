@@ -197,14 +197,17 @@ st.markdown(
     .metric-remaining { font-weight: 700; }
     .metric-total { opacity: 0.5; font-size: 0.8rem; }
 
-    /* Prevent the mobile keyboard from hijacking the date picker widget focus */
-    div[data-testid="stSidebar"] div[data-testid="stDateInput"] input {
+    /* Disable focus and text input capabilities on the text node directly */
+    div[data-testid="stSidebar"] div[data-testid="stDateInput"] input[data-testid="stDateInputField"] {
+        pointer-events: none !important;
         caret-color: transparent !important;
+        user-select: none !important;
+        -webkit-user-select: none !important; /* Safari support */
     }
 
-    /* Force mobile browsers to only handle the click as a calendar dropdown action, not text entry */
-    div[data-testid="stSidebar"] data-testid="stDateInput"] div[role="combobox"] {
-        pointer-events: auto !important;
+    /* Ensure the parent block still receives the tap to open the calendar picker */
+    div[data-testid="stSidebar"] div[data-testid="stDateInput"] > div {
+        cursor: pointer !important;
     }
     </style>
     """,
@@ -284,7 +287,7 @@ with st.sidebar:
     st.subheader("➕ Log Manual Expense")
     
     with st.form("sidebar_expense_form", clear_on_submit=True):
-        # 🛡️ Clean, standard date input. It will open and close flawlessly here!
+        # 🛡️ Clean, standard date input. The CSS at the top of the file stops the mobile keyboard.
         tx_date = st.date_input("Date", date.today())
         
         tx_desc = st.text_input("Merchant/Description (e.g. Billa, OMV)")
