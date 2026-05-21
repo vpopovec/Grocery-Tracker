@@ -314,7 +314,7 @@ with st.sidebar:
     with st.form("sidebar_expense_form", clear_on_submit=True):
         
         # Display a clean confirmation label so you know what date is active
-        st.info(f"📋 Logging expense for: **{tx_date.strftime('%A, %b %d, %Y')}**")
+        # st.info(f"📋 Logging expense for: **{tx_date.strftime('%A, %b %d, %Y')}**")
         
         tx_desc = st.text_input("Merchant/Description (e.g. Billa, OMV)")
         tx_amount = st.number_input("Total Amount (€)", min_value=0.0, step=0.01)
