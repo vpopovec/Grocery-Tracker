@@ -279,7 +279,7 @@ with st.sidebar:
     # 🎯 FIX: Changed 'index=0' to 'default="Today"' to match the st.pills API specifications
     date_selection = st.pills(
         "Date Selection",
-        ["Today", "Yesterday", two_days_ago.strftime("%a, %b %d"), "Older Date..."],
+        ["Today", "Yesterday", "Older Date"],
         default="Today"
     )
     
