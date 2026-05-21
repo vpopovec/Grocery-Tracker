@@ -133,7 +133,23 @@ st.set_page_config(page_title="Finance Orchestrator", layout="centered")
 st.markdown(
     """
     <style>
-    /* COMPACT CATEGORY LIST ROW SYSTEM */
+    /* --- NEW: COMPACT TOP HEADER GAP OVERRIDES --- */
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1rem !important;
+    }
+    /* Update the H1 element layout to completely center your family logo title string */
+    h1 {
+        text-align: center !important;
+        margin-bottom: 0.5rem !important;
+        padding-bottom: 0px !important;
+    }
+    [data-testid="stHeader"] {
+        height: 2rem !important;
+        background: transparent !important;
+    }
+
+    /* --- EXISTING LIST ROW SYSTEM --- */
     .compact-category-container {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         display: flex;
