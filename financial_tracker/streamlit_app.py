@@ -267,40 +267,54 @@ for _, row in df_budgets.iterrows():
 full_table_html = f'<div class="compact-category-container">{"".join(html_rows)}</div>'
 st.html(full_table_html)
 
-
-# --- THE SIDEBAR FORM NAVIGATION PATTERN ---
+# --- THE SIDEBAR IMPLEMENTATION ---
 with st.sidebar:
     st.subheader("➕ Log Manual Expense")
     
-    # 1. Dynamically generate a human-readable list of the last 45 days
-    # This automatically tracks across months and shifting calendar years!
+    # 1. Generate clean, non-keyboard date options
     today_date = date.today()
-    date_options = []
-    date_mapping = {}
+    yesterday_date = today_date - relativedelta(days=1)
+    two_days_ago = today_date - relativedelta(days=2)
+    
+    # 🎯 FIX: Changed 'index=0' to 'default="Today"' to match the st.pills API specifications
+    date_selection = st.pills(
+        "Date Selection",
+        ["Today", "Yesterday", two_days_ago.strftime("%a, %b %d"), "Older Date..."],
+        default="Today"
+    )
+    
+    # Handle the date assignment logic based on the pill clicked
+    if date_selection == "Today":
+        tx_date = today_date
+    elif date_selection == "Yesterday":
+        tx_date = yesterday_date
+    elif date_selection == two_days_ago.strftime("%a, %b %d"):
+        tx_date = two_days_ago
+    else:
+        # "Older Date..." was chosen! Show zero-keyboard numeric dropdowns
+        st.markdown("---")
+        st.caption("📅 Select Custom Target Date")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            chosen_day = st.selectbox("Day", list(range(1, 32)), index=today_date.day - 1)
+        with c2:
+            months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            chosen_month = st.selectbox("Month", months, index=today_date.month - 1)
+        with c3:
+            chosen_year = st.selectbox("Year", [today_date.year, today_date.year - 1], index=0)
+            
+        month_num = months.index(chosen_month) + 1
+        try:
+            tx_date = date(chosen_year, month_num, chosen_day)
+        except ValueError:
+            st.error("Invalid calendar day selected!")
+            st.stop()
 
-    for i in range(45):
-        past_date = today_date - relativedelta(days=i)
-        
-        if i == 0:
-            label = f"📅 Today ({past_date.strftime('%a, %b %d')})"
-        elif i == 1:
-            label = f"📅 Yesterday ({past_date.strftime('%a, %b %d')})"
-        else:
-            # If the date drops into a previous calendar year, display it explicitly
-            if past_date.year != today_date.year:
-                label = f"📅 {past_date.strftime('%a, %b %d, %Y')}"
-            else:
-                label = f"📅 {past_date.strftime('%a, %b %d')}"
-                
-        date_options.append(label)
-        date_mapping[label] = past_date
-
-    # 2. Open the formal layout submission block
+    # 2. Open the formal layout submission block for the remaining details
     with st.form("sidebar_expense_form", clear_on_submit=True):
         
-        # 🎯 THE KEYBOARD KILLER: Render our clean single-box dropdown menu
-        chosen_label = st.selectbox("Date", date_options, index=0)
-        tx_date = date_mapping[chosen_label] # Maps the clean label back to a true Python date object
+        # Display a clean confirmation label so you know what date is active
+        st.info(f"📋 Logging expense for: **{tx_date.strftime('%A, %b %d, %Y')}**")
         
         tx_desc = st.text_input("Merchant/Description (e.g. Billa, OMV)")
         tx_amount = st.number_input("Total Amount (€)", min_value=0.0, step=0.01)
@@ -323,7 +337,7 @@ with st.sidebar:
                         VALUES (?, ?, ?, ?, ?)
                     """, (
                         user_id, 
-                        tx_date.strftime("%Y-%m-%d"), # Continues to save the clean string directly to SQL
+                        tx_date.strftime("%Y-%m-%d"), 
                         tx_desc, 
                         tx_amount, 
                         chosen_category_id
