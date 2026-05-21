@@ -196,6 +196,16 @@ st.markdown(
     }
     .metric-remaining { font-weight: 700; }
     .metric-total { opacity: 0.5; font-size: 0.8rem; }
+
+    /* Prevent the mobile keyboard from hijacking the date picker widget focus */
+    div[data-testid="stSidebar"] div[data-testid="stDateInput"] input {
+        caret-color: transparent !important;
+    }
+
+    /* Force mobile browsers to only handle the click as a calendar dropdown action, not text entry */
+    div[data-testid="stSidebar"] data-testid="stDateInput"] div[role="combobox"] {
+        pointer-events: auto !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
