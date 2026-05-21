@@ -138,7 +138,6 @@ st.markdown(
         padding-top: 1.5rem !important;
         padding-bottom: 1rem !important;
     }
-    /* Update the H1 element layout to completely center your family logo title string */
     h1 {
         text-align: center !important;
         margin-bottom: 0.5rem !important;
@@ -197,18 +196,6 @@ st.markdown(
     .metric-remaining { font-weight: 700; }
     .metric-total { opacity: 0.5; font-size: 0.8rem; }
 
-    /* Disable focus and text input capabilities on the text node directly */
-    div[data-testid="stSidebar"] div[data-testid="stDateInput"] input[data-testid="stDateInputField"] {
-        pointer-events: none !important;
-        caret-color: transparent !important;
-        user-select: none !important;
-        -webkit-user-select: none !important; /* Safari support */
-    }
-
-    /* Ensure the parent block still receives the tap to open the calendar picker */
-    div[data-testid="stSidebar"] div[data-testid="stDateInput"] > div {
-        cursor: pointer !important;
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -281,14 +268,39 @@ full_table_html = f'<div class="compact-category-container">{"".join(html_rows)}
 st.html(full_table_html)
 
 
-# --- THE NEW SIDEBAR FORM NAVIGATION PATTERN ---
-# Moving components here completely isolates widget states and resolves the focus bug natively
+# --- THE SIDEBAR FORM NAVIGATION PATTERN ---
 with st.sidebar:
     st.subheader("➕ Log Manual Expense")
     
+    # 1. Dynamically generate a human-readable list of the last 45 days
+    # This automatically tracks across months and shifting calendar years!
+    today_date = date.today()
+    date_options = []
+    date_mapping = {}
+
+    for i in range(45):
+        past_date = today_date - relativedelta(days=i)
+        
+        if i == 0:
+            label = f"📅 Today ({past_date.strftime('%a, %b %d')})"
+        elif i == 1:
+            label = f"📅 Yesterday ({past_date.strftime('%a, %b %d')})"
+        else:
+            # If the date drops into a previous calendar year, display it explicitly
+            if past_date.year != today_date.year:
+                label = f"📅 {past_date.strftime('%a, %b %d, %Y')}"
+            else:
+                label = f"📅 {past_date.strftime('%a, %b %d')}"
+                
+        date_options.append(label)
+        date_mapping[label] = past_date
+
+    # 2. Open the formal layout submission block
     with st.form("sidebar_expense_form", clear_on_submit=True):
-        # 🛡️ Clean, standard date input. The CSS at the top of the file stops the mobile keyboard.
-        tx_date = st.date_input("Date", date.today())
+        
+        # 🎯 THE KEYBOARD KILLER: Render our clean single-box dropdown menu
+        chosen_label = st.selectbox("Date", date_options, index=0)
+        tx_date = date_mapping[chosen_label] # Maps the clean label back to a true Python date object
         
         tx_desc = st.text_input("Merchant/Description (e.g. Billa, OMV)")
         tx_amount = st.number_input("Total Amount (€)", min_value=0.0, step=0.01)
@@ -311,7 +323,7 @@ with st.sidebar:
                         VALUES (?, ?, ?, ?, ?)
                     """, (
                         user_id, 
-                        tx_date.strftime("%Y-%m-%d"), 
+                        tx_date.strftime("%Y-%m-%d"), # Continues to save the clean string directly to SQL
                         tx_desc, 
                         tx_amount, 
                         chosen_category_id
