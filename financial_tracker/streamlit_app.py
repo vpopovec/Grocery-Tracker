@@ -2,6 +2,7 @@
 # dependencies = [
 #     "streamlit",
 #     "pandas",
+#     "python-dateutil",
 # ]
 # ///
 import streamlit as st
@@ -11,23 +12,16 @@ from datetime import datetime, date
 import traceback
 from dateutil.relativedelta import relativedelta
 
-DB_PATH = "../receipts.db"  # Path to your existing SQLite database
+DB_PATH = "../receipts.db"
 
 
 def calculate_active_cycle(anchor_day=10):
-    """
-    Determines the start and end dates of the current cycle based on today's date.
-    """
     today = date.today()
-    
-    # If we haven't reached the anchor day yet this month, 
-    # our budget cycle started in the previous calendar month.
     if today.day < anchor_day:
         start_date = today - relativedelta(months=1)
         start_date = start_date.replace(day=anchor_day)
     else:
         start_date = today.replace(day=anchor_day)
-        
     end_date = start_date + relativedelta(months=1) - relativedelta(days=1)
     return start_date, end_date
 
@@ -39,7 +33,6 @@ def get_db_connection():
     return conn
 
 
-# Initialize table seamlessly
 with get_db_connection() as conn:
     conn.execute("""
     CREATE TABLE IF NOT EXISTS manual_expenses (
@@ -57,8 +50,8 @@ with get_db_connection() as conn:
 
 
 def get_current_user_id():
-    # Hardcoded to your person_id for the local POC
     return 1 
+
 
 def get_budget_status(person_id):
     with get_db_connection() as conn:
@@ -79,7 +72,6 @@ def get_budget_status(person_id):
         ) as start_date
     ),
     combined_spending AS (
-        -- Source A: Automated OCR items with custom classification mapping
         SELECT 
             CASE 
                 WHEN LOWER(i.macro_category) IN ('domácnosť', 'osobná hygiena a kozmetika', 'zdravie a drogéria') 
@@ -94,7 +86,6 @@ def get_budget_status(person_id):
         
         UNION ALL
         
-        -- Source B: Isolated manually logged expenses (mapped verbatim via category configuration)
         SELECT 
             LOWER(bc.category_name) as cat_name,
             me.amount as total_item_cost
@@ -114,21 +105,15 @@ def get_budget_status(person_id):
     WHERE bc.person_id = ?
     GROUP BY bc.id, bc.category_name, bc.monthly_limit, bc.is_personal
     """
-    
     with get_db_connection() as conn:
-        return pd.read_sql_query(
-            query, 
-            conn, 
-            params=(
-                person_id,
-                computed_start_str,
-                person_id,
-                person_id,
-                person_id
-            )
-        )
+        return pd.read_sql_query(query, conn, params=(person_id, computed_start_str, person_id, person_id, person_id))
+
 
 def get_days_until_next_paycheck(person_id):
+    """
+    Looks up the most recent paycheck milestone to calculate the remaining calendar
+    days until the next monthly injection drops.
+    """
     with get_db_connection() as conn:
         row = conn.execute("SELECT max(paycheck_date) FROM paycheck_metadata WHERE person_id = ?", (person_id,)).fetchone()
         if not row or not row[0]:
@@ -141,124 +126,199 @@ def get_days_until_next_paycheck(person_id):
         
         return max((next_paycheck - date.today()).days, 1)
 
-# --- UI ---
-st.set_page_config(page_title="Finance Orchestrator", layout="wide")
-st.title("📊 Family Financial Orchestrator")
 
+# --- UI SETUP & RUNWAY TEXT CODES ---
+st.set_page_config(page_title="Finance Orchestrator", layout="centered")
+
+st.markdown(
+    """
+    <style>
+    /* --- NEW: COMPACT TOP HEADER GAP OVERRIDES --- */
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1rem !important;
+    }
+    h1 {
+        text-align: center !important;
+        margin-bottom: 0.5rem !important;
+        padding-bottom: 0px !important;
+    }
+    [data-testid="stHeader"] {
+        height: 2rem !important;
+        background: transparent !important;
+    }
+
+    /* --- EXISTING LIST ROW SYSTEM --- */
+    .compact-category-container {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+        margin-top: 15px;
+    }
+    .compact-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        background-color: rgba(255, 255, 255, 0.04);
+        border-radius: 8px;
+        font-size: 0.9rem;
+        white-space: nowrap;
+    }
+    .cat-name {
+        font-weight: 600;
+        width: 30%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .progress-bar-bg {
+        flex-grow: 1;
+        height: 10px;
+        background-color: rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        margin: 0 16px;
+        position: relative;
+        overflow: hidden;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.4s ease;
+    }
+    .cat-metrics {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        width: 35%;
+        font-size: 0.85rem;
+    }
+    .metric-remaining { font-weight: 700; }
+    .metric-total { opacity: 0.5; font-size: 0.8rem; }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.title("👨‍👩‍👧 V+M+V 💰")
 user_id = get_current_user_id()
 
 try:
     df_budgets = get_budget_status(user_id)
+    # ─── EXTRACTION STEP: Pull your days left metrics cleanly from your DB engine
     days_left = get_days_until_next_paycheck(user_id)
 except Exception as e:
-    st.error("Database extensions uninitialized. Please go to the Configuration page first!")
-    traceback.print_exc()
+    st.error("Database connections uninitialized.")
     st.stop()
 
-col_dash, col_input = st.columns([2, 1], gap="large")
-with col_dash:
-    # --- PIPELINE RETRIEVAL ---
-    df_budgets = get_budget_status(user_id)
 
-    # ─── CALCULATE DAYS REMAINING IN CURRENT CYCLE ──────────────────────
-    # We fetch the anchor to find out exactly where we are in the timeline
-    with get_db_connection() as conn:
-        row = conn.execute(
-            "SELECT paycheck_anchor_day FROM global_settings WHERE person_id = ?", 
-            (user_id,)
-        ).fetchone()
-        anchor_day = row[0] if row else 10
+# --- 1. NEW: PAYCHECK COUNTDOWN RUNWAY ---
+# This acts as a high-level timeline tracker sitting comfortably above your targets
+total_cycle_days = 30 # Standard fallback cycle length context
+days_pct = max(min((days_left / total_cycle_days), 1.0), 0.0)
 
-    _, computed_end = calculate_active_cycle(anchor_day)
-    # Ensure days_left is at least 1 to eliminate any zero-division errors
-    days_left = max((computed_end - date.today()).days, 1)
-    # ────────────────────────────────────────────────────────────────────
+# The timeline bar remains a clean, neutral blue so it doesn't clash with budget alerts
+timeline_html = f"""
+<div style="margin-bottom: 25px; background-color: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.9rem;">
+        <span style="font-weight: 600; opacity: 0.9;">⏳ Paycheck Timeline</span>
+        <span style="font-weight: 700; color: #60a5fa;">{days_left} days remaining</span>
+    </div>
+    <div class="progress-bar-bg" style="margin: 0; height: 8px;">
+        <div class="progress-bar-fill" style="width: {days_pct*100}%; background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);"></div>
+    </div>
+</div>
+"""
+st.html(timeline_html)
 
-    # Divide our single DataFrame into two targeted visual subsets
-    personal_df = df_budgets[df_budgets['is_personal'] == 1]
-    shared_df = df_budgets[df_budgets['is_personal'] == 0]
+# --- MAIN RUNWAY CONTENT DISPLAY ---
+st.subheader("Budget Status")
 
-    # --- SECTION 1: PERSONAL BUDGETS ---
-    st.header("👤 Personal Budgets")
-    if personal_df.empty:
-        st.info("No personal budget categories configured yet.")
+html_rows = []
+for _, row in df_budgets.iterrows():
+    name = str(row['category_name']).title()
+    spent = float(row['total_spent'])
+    limit = float(row['monthly_limit'])
+    
+    remaining = max(limit - spent, 0.0)
+    pct = max((remaining / limit), 0.0) if limit > 0 else 0.0
+    
+    if pct <= 0.15:
+        color = "#ff4b4b"  # Danger Warning Red (15% or less runway left)
+    elif pct <= 0.40:
+        color = "#faca15"  # Cautionary Yellow
     else:
-        for _, row in personal_df.iterrows():
-            limit = row['monthly_limit']
-            spent = row['total_spent']
-            
-            has_no_limit = pd.isna(limit) or limit <= 0
-            if has_no_limit:
-                limit = 1.0  
+        color = "#22c55e"  # Safe Runway Green
+        
+    html_rows.append(f"""
+    <div class="compact-row">
+        <div class="cat-name">{name}</div>
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" style="width: {pct*100}%; background-color: {color};"></div>
+        </div>
+        <div class="cat-metrics">
+            <span class="metric-remaining" style="color: {color if pct <= 0.40 else 'inherit'}">{remaining:.0f} € left</span>
+            <span class="metric-total">/ {limit:.0f} €</span>
+        </div>
+    </div>
+    """)
+    
+full_table_html = f'<div class="compact-category-container">{"".join(html_rows)}</div>'
+st.html(full_table_html)
 
-            remaining = max(limit - spent, 0.0)
-            # Calculate pace based on money left vs time left
-            daily_allowance = remaining / days_left
-            
-            st.write(f"### {row['category_name'].title()}")
-            m1, m2, m3 = st.columns(3)
-            
-            if has_no_limit:
-                m1.metric("Remaining", "No Limit Set")
-                m2.metric("Daily Allowance", "N/A")
-            else:
-                m1.metric("Remaining", f"€{remaining:.2f}")
-                m2.metric("Daily Allowance", f"€{daily_allowance:.2f}/day")
-                
-            m3.metric("Spent", f"€{spent:.2f}")
-            
-            progress_val = min(spent / limit, 1.0)
-            if pd.isna(progress_val): progress_val = 0.0
-            st.progress(progress_val)
-
-
-    # ─── SECTION 2: HOUSEHOLD & SHARED BUDGETS ────────────────────────
-    st.markdown("---")
-    st.header("🏠 Household & Shared Budgets")
-    st.caption(f"Tracking shared allocations across your unified receipt scans. ({days_left} days left in cycle)")
-
-    if shared_df.empty:
-        st.info("No shared/household categories configured yet in Configuration.")
-    else:
-        for _, row in shared_df.iterrows():
-            limit = row['monthly_limit']
-            spent = row['total_spent']
-            
-            has_no_limit = pd.isna(limit) or limit <= 0
-            if has_no_limit:
-                limit = 1.0  
-                
-            remaining = max(limit - spent, 0.0)
-            daily_allowance = remaining / days_left
-            
-            st.write(f"### {row['category_name'].title()}")
-            col_rem, col_pace, col_spent = st.columns(3)
-            
-            if has_no_limit:
-                col_rem.metric("Remaining", "No Cap Configured")
-                col_pace.metric("Daily Allowance", "N/A")
-            else:
-                col_rem.metric("Remaining", f"€{remaining:.2f}")
-                col_pace.metric("Daily Allowance", f"€{daily_allowance:.2f}/day")
-                
-            col_spent.metric("Total Spent", f"€{spent:.2f}")
-            
-            progress_val = min(spent / limit, 1.0)
-            if pd.isna(progress_val): 
-                progress_val = 0.0
-                
-            st.progress(progress_val)
-            st.markdown(" ")
-
-with col_input:
+# --- THE SIDEBAR IMPLEMENTATION ---
+with st.sidebar:
     st.subheader("➕ Log Manual Expense")
-    with st.form("manual_expense", clear_on_submit=True):
-        tx_date = st.date_input("Date", date.today())
-        tx_desc = st.text_input("Merchant/Description (e.g. Mortgage, OMV)")
+    
+    # 1. Generate clean, non-keyboard date options
+    today_date = date.today()
+    yesterday_date = today_date - relativedelta(days=1)
+    two_days_ago = today_date - relativedelta(days=2)
+    
+    # 🎯 FIX: Changed 'index=0' to 'default="Today"' to match the st.pills API specifications
+    date_selection = st.pills(
+        "Date Selection",
+        ["Today", "Yesterday", "Older Date"],
+        default="Today"
+    )
+    
+    # Handle the date assignment logic based on the pill clicked
+    if date_selection == "Today":
+        tx_date = today_date
+    elif date_selection == "Yesterday":
+        tx_date = yesterday_date
+    elif date_selection == two_days_ago.strftime("%a, %b %d"):
+        tx_date = two_days_ago
+    else:
+        # "Older Date..." was chosen! Show zero-keyboard numeric dropdowns
+        st.markdown("---")
+        st.caption("📅 Select Custom Target Date")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            chosen_day = st.selectbox("Day", list(range(1, 32)), index=today_date.day - 1)
+        with c2:
+            months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            chosen_month = st.selectbox("Month", months, index=today_date.month - 1)
+        with c3:
+            chosen_year = st.selectbox("Year", [today_date.year, today_date.year - 1], index=0)
+            
+        month_num = months.index(chosen_month) + 1
+        try:
+            tx_date = date(chosen_year, month_num, chosen_day)
+        except ValueError:
+            st.error("Invalid calendar day selected!")
+            st.stop()
+
+    # 2. Open the formal layout submission block for the remaining details
+    with st.form("sidebar_expense_form", clear_on_submit=True):
+        
+        # Display a clean confirmation label so you know what date is active
+        # st.info(f"📋 Logging expense for: **{tx_date.strftime('%A, %b %d, %Y')}**")
+        
+        tx_desc = st.text_input("Merchant/Description (e.g. Billa, OMV)")
         tx_amount = st.number_input("Total Amount (€)", min_value=0.0, step=0.01)
         
-        # ─── CHANGE: Create a dictionary mapping Name -> ID for dropdown selection ───
-        # This assumes your df_budgets or df_categories contains 'category_id' (or 'id') and 'category_name'
         if not df_budgets.empty:
             cat_mapping = dict(zip(df_budgets['category_name'].str.title(), df_budgets['category_id']))
             cat_options = list(cat_mapping.keys())
@@ -268,29 +328,10 @@ with col_input:
             
         tx_cat_name = st.selectbox("Budget Category", cat_options)
         
-        if st.form_submit_button("Save Expense") and tx_amount > 0:
-            if tx_cat_name == "Setup Required":
-                st.error("Please set up categories in Configuration first!")
-            else:
+        if st.form_submit_button("Save Expense", use_container_width=True) and tx_amount > 0:
+            if tx_cat_name != "Setup Required":
                 chosen_category_id = int(cat_mapping[tx_cat_name])
-                
                 with get_db_connection() as conn:
-                    # Make sure the table exists before attempting insertion
-                    conn.execute("""
-                        CREATE TABLE IF NOT EXISTS manual_expenses (
-                            expense_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            person_id INTEGER NOT NULL,
-                            date DATE NOT NULL,
-                            description TEXT NOT NULL,
-                            amount REAL NOT NULL,
-                            category_id INTEGER NOT NULL,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (person_id) REFERENCES person (person_id),
-                            FOREIGN KEY (category_id) REFERENCES budget_categories (id) ON DELETE CASCADE
-                        );
-                    """)
-                    
-                    # ─── CHANGE: Clean, explicit insert into isolated table ───
                     conn.execute("""
                         INSERT INTO manual_expenses (person_id, date, description, amount, category_id)
                         VALUES (?, ?, ?, ?, ?)
@@ -302,6 +343,5 @@ with col_input:
                         chosen_category_id
                     ))
                     conn.commit()
-                    
-                st.success(f"Logged €{tx_amount:.2f} under {tx_cat_name}!")
+                st.success(f"Logged €{tx_amount:.2f} successfully!")
                 st.rerun()
