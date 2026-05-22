@@ -3,6 +3,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from config import Config
+from g_tracker.extensions import limiter
 
 db = SQLAlchemy()
 login = LoginManager()
@@ -35,18 +36,27 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     login.init_app(app)
+    limiter.init_app(app)
+    limiter.enabled = bool(app.config.get('SCAN_RATE_LIMIT'))
+
+    with app.app_context():
+        db.create_all()
 
     @app.context_processor
-    def inject_dev_password_reset():
+    def inject_security_flags():
         return {
             'dev_password_reset_enabled': bool(
                 app.config.get('ENABLE_DEV_PASSWORD_RESET')),
+            'registration_enabled': bool(app.config.get('REGISTRATION_ENABLED')),
+            'registration_invite_required': bool(
+                app.config.get('REGISTRATION_INVITE_CODE')),
         }
 
-    # a simple page that says hello
-    @app.route('/hello')
-    def hello():
-        return 'Hello, World!'
+    @app.errorhandler(429)
+    def ratelimit_handler(_exc):
+        from flask import flash, redirect, url_for
+        flash('Too many upload attempts. Please wait a minute and try again.')
+        return redirect(url_for('receipt.index'))
 
     from . import welcome, receipts, item_table, auth_routes, insight
     app.register_blueprint(receipts.bp)

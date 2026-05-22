@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -102,3 +102,17 @@ class Scan(db.Model):
 
     def __repr__(self):
         return f"<Scan {self.f_name}>"
+
+
+class LlmDailyUsage(db.Model):
+    """Tracks LLM receipt scans per user per calendar day (server local date)."""
+
+    __tablename__ = 'llm_daily_usage'
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.person_id'), nullable=False)
+    usage_date = db.Column(db.Date, nullable=False)
+    scan_count = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint('person_id', 'usage_date', name='_person_usage_date_uc'),
+    )

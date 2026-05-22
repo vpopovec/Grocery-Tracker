@@ -1,6 +1,8 @@
 from flask import Blueprint, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 from g_tracker.helpers import *
+from g_tracker.extensions import limiter
+from g_tracker.llm_quota import QuotaExceeded, check_scan_allowed, quota_status, record_scan_attempt
 from werkzeug.utils import secure_filename
 from main import process_receipt_from_fpath, save_receipt_to_db
 from uuid import uuid4
@@ -23,6 +25,12 @@ def allowed_file(filename):
 
 def process_file(f_path, shrunk_f_name):
     person_id = int(current_user.get_id())
+    try:
+        check_scan_allowed(person_id)
+    except QuotaExceeded as exc:
+        return None, exc.message
+
+    record_scan_attempt(person_id)
     receipt, status_message = process_receipt_from_fpath(f_path)
     if receipt:
         # TODO: Save to db
@@ -149,7 +157,9 @@ def preprocess_image_for_upload(f_path, max_dim=2000):
 
 @bp.route("/scan", methods=["GET", "POST"])
 @login_required
+@limiter.limit(lambda: current_app.config.get('SCAN_RATE_LIMIT', '5 per minute'), methods=['POST'])
 def index():
+    scan_quota = quota_status(int(current_user.get_id()))
     if request.method == "POST":
         # check if the post request has the file part
         if 'file' not in request.files:
@@ -189,4 +199,4 @@ def index():
 
                 return redirect(url_for('item_table.items'))
 
-    return render_template("receipt.html")
+    return render_template("receipt.html", scan_quota=scan_quota)

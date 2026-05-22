@@ -9,7 +9,13 @@
         <div class="mb-3" id="welcome-title">
             You can upload a file or take a picture of your receipt
         </div>
-        <form method=post enctype=multipart/form-data>
+        {% if scan_quota %}
+        <p class="text-muted small">
+            Scans today: {{ scan_quota.user_count }} / {{ scan_quota.user_limit }}
+            ({{ scan_quota.user_remaining }} remaining)
+        </p>
+        {% endif %}
+        <form method=post enctype=multipart/form-data onsubmit="loading()">
             <div class="mb-3">
                 <input id="upload-file" class="form-control" type=file name=file>
                 <input id="upload-file-btn" class="btn btn-outline-secondary" type=submit value=Upload>
