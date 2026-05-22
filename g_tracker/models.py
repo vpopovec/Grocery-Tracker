@@ -75,8 +75,8 @@ class Item(db.Model):
     price = db.Column(db.Float, nullable=False)
     amount = db.Column(db.Float)
     name = db.Column(db.Text, nullable=False)
-    macro_category = db.Column(db.Text, nullable=False)
-    micro_category = db.Column(db.Text, nullable=False)
+    macro_category = db.Column(db.Text, nullable=False, default="Ostatné")
+    micro_category = db.Column(db.Text, nullable=False, default="Nezaradené")
     receipt_id = db.Column(db.Integer, db.ForeignKey("receipt.receipt_id"))
 
     def __repr__(self):

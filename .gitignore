@@ -59,3 +59,9 @@ check_easyocr.py
 # Static files (user-generated)
 g_tracker/static/graphs/
 g_tracker/static/user_*/
+g_tracker/**/*.png
+g_tracker/**/*.jpg
+!g_tracker/static/delete_icon.svg
+!g_tracker/static/favicon.ico
+!g_tracker/static/receipt.svg
+!g_tracker/static/styles.css
