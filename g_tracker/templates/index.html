@@ -17,8 +17,14 @@
             <li>Easy to use</li>
         </ul>
 
-        <a href="/scan">
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('receipt.index') }}">
             <input class="btn btn-outline-secondary" name="get-started" type="submit" value="Get Started">
         </a>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}">
+            <input class="btn btn-outline-secondary" name="get-started" type="submit" value="Sign in to get started">
+        </a>
+        {% endif %}
     </div>
 {% endblock %}

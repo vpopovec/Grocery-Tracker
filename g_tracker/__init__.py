@@ -3,13 +3,14 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from config import Config
+from g_tracker.extensions import limiter
 
 db = SQLAlchemy()
 login = LoginManager()
 login.login_view = 'auth.login'
 
 
-def _ensure_sqlite_receipt_columns(app):
+def _ensure_sqlite_schema(app):
     """Keep SQLite schema in sync when the app runs without importing main/sqlite_db.Database."""
     try:
         from sqlalchemy.engine.url import make_url
@@ -19,11 +20,12 @@ def _ensure_sqlite_receipt_columns(app):
     if u.drivername != 'sqlite' or not u.database:
         return
     import sqlite3
-    from sqlite_db import ensure_receipt_llm_elapsed_column
+    from sqlite_db import ensure_llm_daily_usage_schema, ensure_receipt_llm_elapsed_column
 
     conn = sqlite3.connect(u.database)
     try:
         ensure_receipt_llm_elapsed_column(conn)
+        ensure_llm_daily_usage_schema(conn)
     finally:
         conn.close()
 
@@ -35,18 +37,30 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     login.init_app(app)
+    limiter.init_app(app)
+
+    _ensure_sqlite_schema(app)
+
+    with app.app_context():
+        db.create_all()
 
     @app.context_processor
-    def inject_dev_password_reset():
+    def inject_security_flags():
         return {
             'dev_password_reset_enabled': bool(
                 app.config.get('ENABLE_DEV_PASSWORD_RESET')),
+            'registration_enabled': bool(app.config.get('REGISTRATION_ENABLED')),
+            'registration_invite_required': bool(
+                app.config.get('REGISTRATION_INVITE_CODE')),
         }
 
-    # a simple page that says hello
-    @app.route('/hello')
-    def hello():
-        return 'Hello, World!'
+    @app.errorhandler(429)
+    def ratelimit_handler(_exc):
+        from flask import flash, redirect, request, url_for
+        flash('Too many requests. Please wait a moment and try again.')
+        if request.path.startswith('/ask-ai'):
+            return redirect(url_for('insight.index'))
+        return redirect(url_for('receipt.index'))
 
     from . import welcome, receipts, item_table, auth_routes, insight
     app.register_blueprint(receipts.bp)
@@ -54,8 +68,6 @@ def create_app(config_class=Config):
     app.register_blueprint(item_table.bp)
     app.register_blueprint(auth_routes.bp)
     app.register_blueprint(insight.bp)
-
-    _ensure_sqlite_receipt_columns(app)
 
     return app
 

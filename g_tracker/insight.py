@@ -1,5 +1,14 @@
+import traceback
+
 from flask import Blueprint, request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
+from g_tracker.extensions import limiter
+from g_tracker.llm_quota import (
+    INSIGHT_CHAT,
+    QuotaExceeded,
+    check_usage_allowed,
+    record_usage_attempt,
+)
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, db
 from g_tracker.helpers import *
@@ -175,16 +184,22 @@ def create_graphs():
 
 @bp.route('/ask-ai', methods=['POST'])
 @login_required
+@limiter.limit(lambda: current_app.config.get('ASK_AI_RATE_LIMIT', '10 per minute'))
 def ask_ai():
-    # 'request' is used to get the JSON sent by the JS fetch()
     data = request.get_json()
     user_message = data.get('message')
 
     if not user_message:
         return jsonify({"reply": "I didn't catch that. Could you repeat?"}), 400
 
+    person_id = int(current_user.get_id())
     try:
-        # Call your Groq/Gemini/Local function here
+        check_usage_allowed(person_id, INSIGHT_CHAT)
+    except QuotaExceeded as exc:
+        return jsonify({"reply": exc.message}), 429
+
+    try:
+        record_usage_attempt(person_id, INSIGHT_CHAT)
         response_text = ai_financial_agent(user_message)
         
         # Temporary mock response for testing

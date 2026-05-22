@@ -41,6 +41,15 @@
             <span style="collor: red;">[{{ error }}]</span>
             {% endfor %}
         </p>
+        {% if registration_invite_required %}
+        <p>
+            {{ form.invite_code.label }}<br>
+            {{ form.invite_code(size=32, class_="form-control mx-auto w-auto") }}<br>
+            {% for error in form.invite_code.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        {% endif %}
         <p>{{ form.submit(class_="btn btn-outline-secondary") }}</p>
     </form>
 {% endblock %}
