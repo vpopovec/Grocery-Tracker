@@ -19,6 +19,49 @@ def ensure_receipt_llm_elapsed_column(conn):
         conn.commit()
 
 
+def ensure_llm_daily_usage_schema(conn):
+    """Migrate llm_daily_usage from legacy scan_count schema to usage_count + usage_kind."""
+    if not conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='llm_daily_usage'"
+    ).fetchone():
+        return
+
+    names = {row[1] for row in conn.execute("PRAGMA table_info(llm_daily_usage)").fetchall()}
+    if "usage_count" in names and "usage_kind" in names:
+        return
+
+    if "scan_count" in names:
+        conn.executescript(
+            """
+            CREATE TABLE llm_daily_usage_new (
+                id INTEGER NOT NULL PRIMARY KEY,
+                person_id INTEGER NOT NULL,
+                usage_date DATE NOT NULL,
+                usage_kind VARCHAR(32) NOT NULL,
+                usage_count INTEGER NOT NULL,
+                CONSTRAINT _person_usage_kind_date_uc
+                    UNIQUE (person_id, usage_date, usage_kind),
+                FOREIGN KEY(person_id) REFERENCES person (person_id)
+            );
+            INSERT INTO llm_daily_usage_new
+                (id, person_id, usage_date, usage_kind, usage_count)
+            SELECT id, person_id, usage_date, 'receipt_scan', scan_count
+            FROM llm_daily_usage;
+            DROP TABLE llm_daily_usage;
+            ALTER TABLE llm_daily_usage_new RENAME TO llm_daily_usage;
+            """
+        )
+        conn.commit()
+        return
+
+    if "usage_count" in names and "usage_kind" not in names:
+        conn.execute(
+            "ALTER TABLE llm_daily_usage "
+            "ADD COLUMN usage_kind VARCHAR(32) NOT NULL DEFAULT 'receipt_scan'"
+        )
+        conn.commit()
+
+
 class Database:
     # Disable same check thread to allow usage across multiple requests
     conn = sqlite3.connect(db_fp, check_same_thread=False)

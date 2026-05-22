@@ -74,13 +74,25 @@ def logout():
     return redirect(url_for('welcome.index'))
 
 
+def _registration_allowed() -> bool:
+    return bool(current_app.config.get('REGISTRATION_ENABLED'))
+
+
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
+    if not _registration_allowed():
+        abort(404)
     if current_user.is_authenticated:
         # TODO: Create a Dashboard
         return redirect(url_for('item_table.receipts'))
     form = RegistrationForm()
     if form.validate_on_submit():
+        if current_app.config.get('REGISTRATION_INVITE_CODE'):
+            expected = current_app.config['REGISTRATION_INVITE_CODE']
+            provided = (form.invite_code.data or '').strip()
+            if provided != expected:
+                flash('Invalid invite code.')
+                return redirect(url_for('auth.register'))
         person = Person(username=form.username.data, email=form.email.data, name=form.nickname.data)
         person.set_password(form.password.data)
         print(f"REGISTERED {person}")

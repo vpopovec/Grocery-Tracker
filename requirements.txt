@@ -3,7 +3,10 @@ Flask>=2.3.0
 Flask-SQLAlchemy>=3.0.0
 Flask-Login>=0.6.0
 Flask-WTF>=1.1.0
+Flask-Limiter>=3.5.0
 Werkzeug>=2.3.0
+openai>=1.0.0
+groq>=0.11.0
 
 # Forms
 WTForms>=3.0.0
