@@ -53,23 +53,38 @@ def get_current_user_id():
     return 1 
 
 
-def get_budget_status(person_id):
+def get_current_cycle_start(person_id):
+    """
+    Returns the start date of the active budget cycle. Uses paycheck_metadata when
+    it applies to the current cycle; otherwise falls back to paycheck_anchor_day.
+    """
     with get_db_connection() as conn:
-        row = conn.execute(
-            "SELECT paycheck_anchor_day FROM global_settings WHERE person_id = ?", 
-            (person_id,)
+        anchor_row = conn.execute(
+            "SELECT paycheck_anchor_day FROM global_settings WHERE person_id = ?",
+            (person_id,),
         ).fetchone()
-        anchor_day = row[0] if row else 10
+        anchor_day = anchor_row[0] if anchor_row else 10
 
-    computed_start_date, _ = calculate_active_cycle(anchor_day)
-    computed_start_str = computed_start_date.strftime("%Y-%m-%d")
+        row = conn.execute(
+            "SELECT max(paycheck_date) FROM paycheck_metadata WHERE person_id = ?",
+            (person_id,),
+        ).fetchone()
+
+    cycle_start, _ = calculate_active_cycle(anchor_day)
+    if row and row[0]:
+        last_paycheck = datetime.strptime(row[0], "%Y-%m-%d").date()
+        if last_paycheck + relativedelta(months=1) > date.today():
+            cycle_start = last_paycheck
+
+    return cycle_start
+
+
+def get_budget_status(person_id):
+    cycle_start_str = get_current_cycle_start(person_id).strftime("%Y-%m-%d")
 
     query = """
     WITH current_cycle AS (
-        SELECT COALESCE(
-            (SELECT max(paycheck_date) FROM paycheck_metadata WHERE person_id = ?),
-            ? 
-        ) as start_date
+        SELECT ? as start_date
     ),
     combined_spending AS (
         SELECT 
@@ -106,25 +121,15 @@ def get_budget_status(person_id):
     GROUP BY bc.id, bc.category_name, bc.monthly_limit, bc.is_personal
     """
     with get_db_connection() as conn:
-        return pd.read_sql_query(query, conn, params=(person_id, computed_start_str, person_id, person_id, person_id))
+        return pd.read_sql_query(query, conn, params=(cycle_start_str, person_id, person_id, person_id))
 
 
 def get_days_until_next_paycheck(person_id):
     """
-    Looks up the most recent paycheck milestone to calculate the remaining calendar
-    days until the next monthly injection drops.
+    Calculates remaining calendar days until the next monthly paycheck.
     """
-    with get_db_connection() as conn:
-        row = conn.execute("SELECT max(paycheck_date) FROM paycheck_metadata WHERE person_id = ?", (person_id,)).fetchone()
-        if not row or not row[0]:
-            return 30
-        last_paycheck = datetime.strptime(row[0], "%Y-%m-%d").date()
-        if last_paycheck.month == 12:
-            next_paycheck = date(last_paycheck.year + 1, 1, last_paycheck.day)
-        else:
-            next_paycheck = date(last_paycheck.year, last_paycheck.month + 1, last_paycheck.day)
-        
-        return max((next_paycheck - date.today()).days, 1)
+    next_paycheck = get_current_cycle_start(person_id) + relativedelta(months=1)
+    return max((next_paycheck - date.today()).days, 1)
 
 
 # --- UI SETUP & RUNWAY TEXT CODES ---
