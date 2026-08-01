@@ -48,6 +48,21 @@ def _lookup_valid_token(raw: str) -> Optional[PasswordResetToken]:
     return row
 
 
+@bp.route('/internal/verify-session')
+def verify_session():
+    """Auth gate for Caddy's forward_auth in front of the Streamlit financial tracker.
+
+    2xx + X-Person-Id -> Caddy lets the request through and copies the header upstream.
+    Non-2xx (here, the redirect from login_required-style logic) -> Caddy relays it to
+    the client as-is, which sends them to /login.
+    """
+    if not current_user.is_authenticated:
+        return redirect(url_for('auth.login'))
+    resp = current_app.response_class(status=200)
+    resp.headers['X-Person-Id'] = str(current_user.get_id())
+    return resp
+
+
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:

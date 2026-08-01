@@ -10,6 +10,8 @@ import sqlite3
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
+from auth import get_current_user_id
+
 DB_PATH = "../receipts.db"
 
 def get_db_connection():
@@ -85,7 +87,7 @@ def calculate_active_cycle(anchor_day=10):
 
 st.header("💳 Paycheck & Budget Cycle Sync")
 
-user_id = 1
+user_id = get_current_user_id()
 
 # 1. Fetch current anchor configuration from database
 with get_db_connection() as conn:

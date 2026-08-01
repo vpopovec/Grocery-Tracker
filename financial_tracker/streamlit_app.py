@@ -12,6 +12,8 @@ from datetime import datetime, date
 import traceback
 from dateutil.relativedelta import relativedelta
 
+from auth import get_current_user_id
+
 DB_PATH = "../receipts.db"
 
 
@@ -49,8 +51,6 @@ with get_db_connection() as conn:
     """)
 
 
-def get_current_user_id():
-    return 1 
 
 
 def get_current_cycle_start(person_id):

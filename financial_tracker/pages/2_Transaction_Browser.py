@@ -8,6 +8,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 
+from auth import get_current_user_id
+
 DB_PATH = "../receipts.db"  # Path to your existing SQLite database
 
 def get_db_connection():
@@ -57,8 +59,7 @@ st.set_page_config(page_title="Transaction Ledger", layout="wide")
 st.title("🔍 Transaction Ledger Browser")
 st.caption("Browse, search, and analyze all expenses across your shared account and personal budgets.")
 
-# Mock user session state link
-user_id = 1
+user_id = get_current_user_id()
 
 # Load baseline ledger
 try:
