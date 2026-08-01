@@ -20,20 +20,28 @@ stopping after Task 2 still covers the two heaviest domains.
 
 ---
 
-## Task 0 — Lock down `/analytics` (do first, not exam-related)
+## Task 0 — Lock down `/analytics` (do first, not exam-related) ✅ Done
+
+Implemented via Caddy `forward_auth` gating `/analytics*` against a new Flask
+`/internal/verify-session` endpoint, which copies `X-Person-Id` upstream to Streamlit
+(replacing the hardcoded `person_id = 1` in all three Streamlit pages). Fixed one bug
+along the way: Werkzeug's dev server 400'd on the WebSocket `Upgrade`/`Connection`
+headers Caddy forwarded into the auth sub-request — resolved by clearing those headers
+specifically on the `forward_auth` call.
 
 The Streamlit financial tracker is on a public Azure VM with an unauthenticated `/analytics`
 endpoint, and `get_current_user_id()` in [streamlit_app.py](financial_tracker/streamlit_app.py:52)
 assumes a single owner. This is a live exposure. It earns zero exam points — do it anyway, this
 week, and timebox it.
 
-- [ ] Decide the auth approach (Streamlit native auth vs. reverse-proxy basic auth on the VM vs.
+- [x] Decide the auth approach (Streamlit native auth vs. reverse-proxy basic auth on the VM vs.
       shared-secret query gate). Proxy-level is likely fastest and least code.
-- [ ] Confirm nothing else on the VM is unintentionally listening (`ss -tlnp`, check the Flask app's
-      bind address too).
-- [ ] Make `get_current_user_id()` derive from the authenticated session rather than returning a
+- [x] Confirm nothing else on the VM is unintentionally listening (`ss -tlnp`, check the Flask app's
+      bind address too). — both Flask (:5000) and Streamlit (:8501) were already bound to 127.0.0.1
+      only, not 0.0.0.0; Caddy is the sole public entry point.
+- [x] Make `get_current_user_id()` derive from the authenticated session rather than returning a
       hardcoded/implicit owner.
-- [ ] Verify from a logged-out browser / incognito that `/analytics` refuses access.
+- [x] Verify from a logged-out browser / incognito that `/analytics` refuses access.
 
 Multi-tenant onboarding (first-visit budget category setup) is deliberately **not** in scope here —
 it is a product feature, not a security fix, and it is not exam-relevant. Separate it out.
