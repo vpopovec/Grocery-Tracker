@@ -198,6 +198,7 @@
     <a class="btn btn-outline-secondary m-3" href="{{ url_for('item_table.receipts') }}">See All Receipts</a>
     <a class="btn btn-outline-secondary m-3" href="{{ url_for('item_table.photo') }}" target="_blank">Receipt Picture</a>
     <button class="btn btn-outline-secondary m-3" id="add-row-button">Add Row</button>
+    <a class="btn btn-brand m-3" href="{{ url_for('receipt.index') }}">Upload Next Receipt</a>
     <script>
       document.getElementById('add-row-button').onclick = function(){
         var request = new XMLHttpRequest();
@@ -211,8 +212,5 @@
       }
     </script>
     <div class="total-price mx-auto p-3">Total paid: <div class="d-inline" id="receipt-total">{{receipt_total}}</div></div>
-    <div class="pb-4">
-      <a class="btn btn-primary btn-lg" href="{{ url_for('receipt.index') }}">⬆️ Upload Next Receipt</a>
-    </div>
 
 {% endblock %}

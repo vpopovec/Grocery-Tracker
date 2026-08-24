@@ -25,7 +25,7 @@ class Config(object):
     REGISTRATION_INVITE_CODE = os.environ.get('REGISTRATION_INVITE_CODE', '').strip()
 
     # OpenRouter receipt scans (/scan).
-    LLM_SCANS_PER_USER_PER_DAY = _env_int('LLM_SCANS_PER_USER_PER_DAY', 10)
+    LLM_SCANS_PER_USER_PER_DAY = _env_int('LLM_SCANS_PER_USER_PER_DAY', 20)
     LLM_SCANS_GLOBAL_PER_DAY = _env_int('LLM_SCANS_GLOBAL_PER_DAY', 50)
     SCAN_RATE_LIMIT = os.environ.get('SCAN_RATE_LIMIT', '5 per minute')
 

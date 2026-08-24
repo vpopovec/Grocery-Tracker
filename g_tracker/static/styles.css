@@ -99,3 +99,31 @@ button a {
     color: inherit;
     text-decoration: none;
 }
+
+/* Primary action button, in the navbar brand blue */
+.btn-brand {
+    background-color: #537fbe;
+    border: 1px solid #537fbe;
+    color: #fff;
+}
+
+.btn-brand:hover {
+    background-color: #456a9f;
+    border-color: #456a9f;
+    color: #fff;
+}
+
+.btn-brand:focus,
+.btn-brand.focus {
+    background-color: #456a9f;
+    border-color: #456a9f;
+    color: #fff;
+    box-shadow: 0 0 0 0.25rem rgba(83, 127, 190, 0.5);
+}
+
+.btn-brand:active,
+.btn-brand.active {
+    background-color: #3a5a87;
+    border-color: #3a5a87;
+    color: #fff;
+}

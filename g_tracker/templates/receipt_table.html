@@ -76,7 +76,5 @@
       pagination: true,
     }).render(document.getElementById('table'));
   </script>
-  <div class="pb-4">
-    <a class="btn btn-primary btn-lg" href="{{ url_for('receipt.index') }}">⬆️ Upload Receipt</a>
-  </div>
+  <a class="btn btn-brand m-3" href="{{ url_for('receipt.index') }}">Upload Receipt</a>
 {% endblock %}
