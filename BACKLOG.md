@@ -78,6 +78,30 @@ The current flow assumes one file and immediately redirects to the validation sc
 ([receipts.py:206](g_tracker/receipts.py:206)); batching needs a queue/review UI. Isolate per-file
 failures so one bad image doesn't fail the batch. Pairs naturally with the quick-upload nav below.
 
+### Item-level transaction lookup
+
+Answer questions like *"what did I actually buy for the household this month?"* — today nothing
+can. The Transaction Browser
+([2_Transaction_Browser.py](financial_tracker/pages/2_Transaction_Browser.py)) aggregates one row
+per shopping trip: item names are flattened into a `GROUP_CONCAT` "Details" string, and the row's
+`Category` is `COALESCE(LOWER(i.macro_category), 'groceries')` — whichever item SQLite happened to
+pick out of the group, which is arbitrary and often wrong for a mixed receipt.
+
+So a €63 IKEA trip shows as one row, and filtering by category can't reach the individual lamp or
+carpet inside a mixed Kaufland receipt.
+
+- Add an item-level view (or a toggle on the existing one) that lists individual items with their
+  date, shop, macro/micro category and price, instead of one row per receipt.
+- Filter by macro *and* micro, and by budget line via `category_mapping` — "show me everything
+  routed to household in this cycle" is the driving question.
+- Default the date range to the current budget cycle (`get_current_cycle_start` in
+  [streamlit_app.py](financial_tracker/streamlit_app.py)) so it lines up with what the dashboard
+  bar is showing; make it easy to widen to "last 6 months" for a trend.
+- Show the running total for the current filter, so clicking through from the Household goal bar
+  reconciles against the number on the dashboard.
+- Drop the arbitrary-category bug above while you are in there: a receipt spanning several macros
+  should not claim a single one.
+
 ### Register a new shop
 
 `shop_name` is normalized against a fixed whitelist that lives in the model prompt
@@ -85,11 +109,6 @@ failures so one bad image doesn't fail the batch. Pairs naturally with the quick
 Anything not on the list becomes `"Unknown"`. Household equipment made this concrete — IKEA, Jysk,
 Möbelix, Alza, Datart, OBI and Hornbach had to be added by hand. Let the user add a shop from the
 UI instead, persisted per person and injected into the prompt at scan time.
-
-### Quick "Upload" navigation on the receipts page
-
-Add an Upload button at the bottom of the receipts page so scanning several receipts in a row
-doesn't mean scrolling back up to the navbar each time.
 
 ---
 

@@ -211,5 +211,8 @@
       }
     </script>
     <div class="total-price mx-auto p-3">Total paid: <div class="d-inline" id="receipt-total">{{receipt_total}}</div></div>
+    <div class="pb-4">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('receipt.index') }}">⬆️ Upload Next Receipt</a>
+    </div>
 
 {% endblock %}

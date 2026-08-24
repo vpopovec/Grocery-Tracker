@@ -1,4 +1,6 @@
-# Household Category — Financial Tracker
+# Active Work — Financial Tracker
+
+## 1. Household Category
 
 Goal: see at a glance, every month, whether something went into the household — a lamp, a blender,
 a carpet. This is a **floor to reach, not a ceiling to stay under**. Everything previously in this
@@ -8,14 +10,14 @@ Status: **implemented**. What follows is the shape of the change and how to chec
 
 ---
 
-## The problem it solved
+### The problem it solved
 
 `SLOVAK_TAXONOMY` had a macro called **"Domácnosť"**, but it meant *consumables* — cleaning
 products, paper towels, bags, candles. Durable goods had nowhere to go except
 `Ostatné → Nezaradené`. Macro → budget routing was a hardcoded SQL `CASE` in the Streamlit
 dashboard, and after a scan there was no way to correct an item's category at all.
 
-## What changed
+### What changed
 
 **Taxonomy** — moved out of `main.py` into a stdlib-only [`taxonomy.py`](taxonomy.py) at the repo
 root, so the Flask app and the out-of-process Streamlit tracker share one definition.
@@ -45,7 +47,7 @@ micro that doesn't belong to its macro. The taxonomy is injected server-side rat
 so nothing races the grid's first render, and the `change` listener is delegated on the table
 because grid.js re-renders on sort/search/paginate.
 
-## Fixes carried along
+### Fixes carried along
 
 - **Quantities were double-counted.** The rollup multiplied `i.price * COALESCE(i.amount, 1)`, but
   `price` is already the line total written by `sqlite_db.save_receipt` — 4 yogurts at €2.12 counted
@@ -71,7 +73,7 @@ because grid.js re-renders on sort/search/paginate.
   `__file__` in [`financial_tracker/schema.py`](financial_tracker/schema.py), which also owns all
   the tracker's `CREATE TABLE`s and the one-shot seeding.
 
-## Files
+### Files
 
 | File | Change |
 |---|---|
@@ -80,7 +82,7 @@ because grid.js re-renders on sort/search/paginate.
 | [`main.py`](main.py) | Imports the taxonomy; prompt rules; shop whitelist |
 | [`sqlite_db.py`](sqlite_db.py) | `ensure_household_taxonomy_rename` backfill |
 | [`g_tracker/item_table.py`](g_tracker/item_table.py) | Category fields, pair validation, ownership checks |
-| [`g_tracker/templates/item_table.html`](g_tracker/templates/item_table.html) | Dropdown columns, delegated change handler |
+| [`g_tracker/templates/item_table.html`](g_tracker/templates/item_table.html) | Dropdown columns, delegated change handler, upload button |
 | [`financial_tracker/streamlit_app.py`](financial_tracker/streamlit_app.py) | Mapping-driven rollup, count fix, goal bar |
 | [`financial_tracker/pages/1_Configuration.py`](financial_tracker/pages/1_Configuration.py) | `is_goal`, routing editor, person scoping |
 | [`g_tracker/__init__.py`](g_tracker/__init__.py) | Migrations skip `:memory:` / empty databases |
@@ -88,7 +90,7 @@ because grid.js re-renders on sort/search/paginate.
 
 ---
 
-## Verification
+### Verification
 
 ```bash
 # 1. Backfill ran and is idempotent (second run prints nothing, counts unchanged)
@@ -110,3 +112,26 @@ cd financial_tracker && uv run streamlit run streamlit_app.py
 
 **Back up `receipts.db` before running anything destructive.** It is gitignored, so git will not
 save you.
+
+---
+
+## 2. Quick "Upload" navigation
+
+Status: **implemented**.
+
+Scanning several receipts in a row meant going back up to the navbar every time. The flow is
+upload → scan → land on `/items` to check the extraction → and then nothing points at the next
+upload.
+
+- **`/items`** gained an `⬆️ Upload Next Receipt` button below the total. This is the important
+  one: it is where [receipts.py](g_tracker/receipts.py) redirects after a successful scan, so it
+  closes the loop right where you finish reviewing.
+- **`/receipts`** gained an `⬆️ Upload Receipt` button below the table, for starting from the list.
+
+Both are plain links to `url_for('receipt.index')` (`/scan`) styled `btn btn-primary btn-lg` — the
+primary action on the page, unlike the outline-secondary buttons next to them.
+
+### Verification
+
+Open `/items` and `/receipts`, click the button, confirm it lands on the upload form. After a scan
+completes you should be able to go straight into the next one without touching the navbar.
