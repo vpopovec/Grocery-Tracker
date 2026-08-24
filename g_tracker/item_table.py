@@ -2,6 +2,7 @@ from flask import render_template, request, abort, current_app, Blueprint, send_
 from flask_login import login_required, current_user
 from sqlalchemy import select, func, insert, delete
 from g_tracker.models import Person, Receipt, Item, Scan, db
+from taxonomy import SLOVAK_TAXONOMY, default_micro_for, is_valid_pair
 import os
 import traceback
 bp = Blueprint('item_table', __name__)
@@ -13,6 +14,21 @@ def get_receipts():
         select(Receipt, Person).join(Person).where(Receipt.person_id == person_id) \
         .order_by(Receipt.receipt_id.desc())  # Show recently added receipts on top
     ).all()
+
+
+def get_owned_item(item_id):
+    """Item lookup scoped to the logged-in user.
+
+    item_id is a guessable integer the client sends us, so every mutation has to
+    prove the item hangs off one of this person's receipts. Returns None if not.
+    """
+    person_id = int(current_user.get_id())
+    row = db.session.execute(
+        select(Item)
+        .join(Receipt, Item.receipt_id == Receipt.receipt_id)
+        .where(Item.item_id == item_id, Receipt.person_id == person_id)
+    ).first()
+    return row[0] if row else None
 
 
 @bp.route('/receipts')
@@ -102,6 +118,8 @@ def delete_receipt():
 @login_required
 def delete_row():
     item_id = int(request.args.get('item_id'))
+    if get_owned_item(item_id) is None:
+        abort(404)
     db.session.execute(delete(Item).where(Item.item_id == item_id))
 
     update_receipt_total()
@@ -143,7 +161,11 @@ def items():
         receipt_total = 0
 
     with current_app.app_context():
-        return render_template('item_table.html', receipt_total=receipt_total)
+        return render_template(
+            'item_table.html',
+            receipt_total=receipt_total,
+            taxonomy=SLOVAK_TAXONOMY,
+        )
 
 
 @bp.route('/api/data')
@@ -199,11 +221,32 @@ def update():
         print(f"ID NOT IN DATA! CHECK >> {data=}")
         abort(400)
 
-    # Get item by item_id
-    item = db.session.execute(select(Item).where(Item.item_id == data['id'])).first()[0]
+    # Get item by item_id (scoped to this person)
+    item = get_owned_item(data['id'])
+    if item is None:
+        abort(404)
+
     for field in ['name', 'amount', 'total', 'price']:
         if field in data:
             setattr(item, field, data[field])
+
+    # Categories move together: a micro is only meaningful under its own macro.
+    if 'macro_category' in data or 'micro_category' in data:
+        macro = data.get('macro_category', item.macro_category)
+        if macro not in SLOVAK_TAXONOMY:
+            print(f"UNKNOWN MACRO CATEGORY {macro!r}")
+            abort(400)
+        if 'micro_category' in data:
+            micro = data['micro_category']
+            if not is_valid_pair(macro, micro):
+                print(f"MICRO {micro!r} DOES NOT BELONG TO MACRO {macro!r}")
+                abort(400)
+        else:
+            # Macro changed on its own — keep the micro if it still fits, else reset.
+            micro = item.micro_category if is_valid_pair(macro, item.micro_category) \
+                else default_micro_for(macro)
+        item.macro_category = macro
+        item.micro_category = micro
 
     # Changing Item's price
     if 'price' in data:

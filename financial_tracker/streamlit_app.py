@@ -7,14 +7,12 @@
 # ///
 import streamlit as st
 import pandas as pd
-import sqlite3
 from datetime import datetime, date
 import traceback
 from dateutil.relativedelta import relativedelta
 
 from auth import get_current_user_id
-
-DB_PATH = "../receipts.db"
+from schema import get_db_connection, init_schema, seed_defaults
 
 
 def calculate_active_cycle(anchor_day=10):
@@ -28,29 +26,8 @@ def calculate_active_cycle(anchor_day=10):
     return start_date, end_date
 
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 with get_db_connection() as conn:
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS manual_expenses (
-        expense_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        person_id INTEGER NOT NULL,
-        date DATE NOT NULL,
-        description TEXT NOT NULL,
-        amount REAL NOT NULL,
-        category_id INTEGER NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (person_id) REFERENCES person (person_id),
-        FOREIGN KEY (category_id) REFERENCES budget_categories (id) ON DELETE CASCADE
-    )
-    """)
-
-
+    init_schema(conn)
 
 
 def get_current_cycle_start(person_id):
@@ -86,26 +63,32 @@ def get_budget_status(person_id):
     WITH current_cycle AS (
         SELECT ? as start_date
     ),
+    fallback AS (
+        -- Macros nobody has mapped yet keep landing in groceries, as they did before.
+        SELECT id FROM budget_categories
+        WHERE person_id = ? AND LOWER(category_name) = 'groceries'
+    ),
     combined_spending AS (
-        SELECT 
-            CASE 
-                WHEN LOWER(i.macro_category) IN ('domácnosť', 'osobná hygiena a kozmetika', 'zdravie a drogéria') 
-                     THEN 'cosmetics'
-                ELSE 'groceries'
-            END as cat_name,
-            (i.price * COALESCE(i.amount, 1)) as total_item_cost
+        -- Source A: scanned receipt items, routed by their macro category.
+        -- i.price is already the line total (quantity x unit price) as written by
+        -- sqlite_db.save_receipt, so it must NOT be multiplied by i.amount again.
+        SELECT
+            COALESCE(cm.category_id, (SELECT id FROM fallback)) as category_id,
+            i.price as total_item_cost
         FROM item i
         JOIN receipt r ON i.receipt_id = r.receipt_id
+        LEFT JOIN category_mapping cm
+            ON cm.macro_category = i.macro_category AND cm.person_id = r.person_id
         CROSS JOIN current_cycle cc
         WHERE r.shopping_date >= cc.start_date AND r.person_id = ?
-        
+
         UNION ALL
-        
-        SELECT 
-            LOWER(bc.category_name) as cat_name,
+
+        -- Source B: manually logged expenses, already tagged with a budget category
+        SELECT
+            me.category_id,
             me.amount as total_item_cost
         FROM manual_expenses me
-        JOIN budget_categories bc ON me.category_id = bc.id
         CROSS JOIN current_cycle cc
         WHERE me.date >= cc.start_date AND me.person_id = ?
     )
@@ -114,14 +97,18 @@ def get_budget_status(person_id):
         bc.category_name,
         bc.monthly_limit,
         bc.is_personal,
+        COALESCE(bc.is_goal, 0) as is_goal,
         COALESCE(SUM(cs.total_item_cost), 0) as total_spent
     FROM budget_categories bc
-    LEFT JOIN combined_spending cs ON LOWER(cs.cat_name) = LOWER(bc.category_name)
+    LEFT JOIN combined_spending cs ON cs.category_id = bc.id
     WHERE bc.person_id = ?
-    GROUP BY bc.id, bc.category_name, bc.monthly_limit, bc.is_personal
+    GROUP BY bc.id, bc.category_name, bc.monthly_limit, bc.is_personal, bc.is_goal
     """
     with get_db_connection() as conn:
-        return pd.read_sql_query(query, conn, params=(cycle_start_str, person_id, person_id, person_id))
+        return pd.read_sql_query(
+            query, conn,
+            params=(cycle_start_str, person_id, person_id, person_id, person_id),
+        )
 
 
 def get_days_until_next_paycheck(person_id):
@@ -209,6 +196,9 @@ st.markdown(
 st.title("👨‍👩‍👧 V+M+V 💰")
 user_id = get_current_user_id()
 
+with get_db_connection() as conn:
+    seed_defaults(conn, user_id)
+
 try:
     df_budgets = get_budget_status(user_id)
     # ─── EXTRACTION STEP: Pull your days left metrics cleanly from your DB engine
@@ -244,18 +234,39 @@ html_rows = []
 for _, row in df_budgets.iterrows():
     name = str(row['category_name']).title()
     spent = float(row['total_spent'])
-    limit = float(row['monthly_limit'])
-    
-    remaining = max(limit - spent, 0.0)
-    pct = max((remaining / limit), 0.0) if limit > 0 else 0.0
-    
-    if pct <= 0.15:
-        color = "#ff4b4b"  # Danger Warning Red (15% or less runway left)
-    elif pct <= 0.40:
-        color = "#faca15"  # Cautionary Yellow
+    limit = float(row['monthly_limit']) if pd.notna(row['monthly_limit']) else None
+    is_goal = bool(row['is_goal'])
+
+    if not limit or limit <= 0:
+        # No target set: report what went out, with nothing to fill or drain.
+        pct = 0.0
+        color = "#6b7280"
+        metrics = f'<span class="metric-remaining">{spent:.0f} € spent</span>'
+    elif is_goal:
+        # Inverted bar: this is a monthly floor to reach, not a ceiling to stay under.
+        name = f"{name} 🎯"
+        pct = min(spent / limit, 1.0)
+        color = "#22c55e" if spent >= limit else "#60a5fa"
+        metrics = (
+            f'<span class="metric-remaining" style="color: {color}">{spent:.0f} € invested</span>'
+            f'<span class="metric-total">/ {limit:.0f} € goal</span>'
+        )
     else:
-        color = "#22c55e"  # Safe Runway Green
-        
+        remaining = max(limit - spent, 0.0)
+        pct = max((remaining / limit), 0.0)
+
+        if pct <= 0.15:
+            color = "#ff4b4b"  # Danger Warning Red (15% or less runway left)
+        elif pct <= 0.40:
+            color = "#faca15"  # Cautionary Yellow
+        else:
+            color = "#22c55e"  # Safe Runway Green
+
+        metrics = (
+            f'<span class="metric-remaining" style="color: {color if pct <= 0.40 else "inherit"}">{remaining:.0f} € left</span>'
+            f'<span class="metric-total">/ {limit:.0f} €</span>'
+        )
+
     html_rows.append(f"""
     <div class="compact-row">
         <div class="cat-name">{name}</div>
@@ -263,8 +274,7 @@ for _, row in df_budgets.iterrows():
             <div class="progress-bar-fill" style="width: {pct*100}%; background-color: {color};"></div>
         </div>
         <div class="cat-metrics">
-            <span class="metric-remaining" style="color: {color if pct <= 0.40 else 'inherit'}">{remaining:.0f} € left</span>
-            <span class="metric-total">/ {limit:.0f} €</span>
+            {metrics}
         </div>
     </div>
     """)

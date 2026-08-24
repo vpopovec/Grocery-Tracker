@@ -9,13 +9,7 @@ import pandas as pd
 import sqlite3
 
 from auth import get_current_user_id
-
-DB_PATH = "../receipts.db"  # Path to your existing SQLite database
-
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+from schema import get_db_connection
 
 def get_all_transactions(person_id):
     # Aggregates automated items by receipt, and combines them with manual expenses

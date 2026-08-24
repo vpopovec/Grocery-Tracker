@@ -4,6 +4,14 @@
 {% endblock %}
 
 {% block main %}
+    <style>
+      /* Keep the two category dropdowns from stretching the grid on narrow screens */
+      .category-select {
+        max-width: 11rem;
+        font-size: 0.8rem;
+        padding: 0.15rem 1.5rem 0.15rem 0.4rem;
+      }
+    </style>
     <div>
       <h1>Items</h1>
       <hr>
@@ -13,6 +21,27 @@
     <script defer>
       const tableDiv = document.getElementById('table');
       const receiptTotalDiv = document.getElementById('receipt-total');
+
+      // Injected server-side rather than fetched: the page is already rendered by
+      // Flask, so this avoids an async load racing the grid's first render.
+      const TAXONOMY = {{ taxonomy|tojson }};
+
+      const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => (
+        {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]
+      ));
+
+      const categorySelect = (itemId, field, options, selected) => {
+        const opts = options.map(o =>
+          `<option value="${escapeHtml(o)}"${o === selected ? ' selected' : ''}>${escapeHtml(o)}</option>`
+        ).join('');
+        // An unknown value (legacy row, model typo) stays visible instead of silently
+        // snapping to the first option — you can see what needs fixing.
+        const orphan = (selected && !options.includes(selected))
+          ? `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (?)</option>`
+          : '';
+        return `<select class="form-select form-select-sm category-select"
+                        data-item-id="${escapeHtml(itemId)}" data-field="${field}">${orphan}${opts}</select>`;
+      };
 
       const updateUrl = (prev, query) => {
         return prev + (prev.indexOf('?') >= 0 ? '&' : '?') + new URLSearchParams(query).toString();
@@ -50,6 +79,14 @@
                             },
                       },
           },
+          { id: 'macro_category', name: 'Category', sort: false,
+            formatter: (cell, row) => gridjs.html(
+              categorySelect(row.cells[0].data, 'macro_category', Object.keys(TAXONOMY), cell))
+          },
+          { id: 'micro_category', name: 'Subcategory', sort: false,
+            formatter: (cell, row) => gridjs.html(
+              categorySelect(row.cells[0].data, 'micro_category', TAXONOMY[row.cells[4].data] || [], cell))
+          },
           // Can't use url_for in javascript because of item_id reference
           { id: 'delete_item', name: 'Delete', formatter: (item_id) =>
               gridjs.html(`<a href="/delete-row?item_id=${item_id}" }}><img src="/static/delete_icon.svg"/></a>`)}
@@ -57,7 +94,8 @@
         server: {
           url: '/api/data',
           then: results => results.data.map(item =>
-            [item.id, item.name, item.amount, item.price, item.id]),
+            [item.id, item.name, item.amount, item.price,
+             item.macro_category, item.micro_category, item.id]),
           total: results => results.total,
           total_price: results => results.total_price
         },
@@ -110,6 +148,38 @@
           }
           savedValue = undefined;
         }
+      });
+
+      tableDiv.addEventListener('change', ev => {
+        const select = ev.target;
+        if (select.tagName !== 'SELECT') return;
+
+        const row = select.closest('tr');
+        const macroSelect = row.querySelector('select[data-field="macro_category"]');
+        const microSelect = row.querySelector('select[data-field="micro_category"]');
+        const macro = macroSelect ? macroSelect.value : null;
+        const micros = TAXONOMY[macro] || [];
+
+        if (select.dataset.field === 'macro_category' && microSelect) {
+          // Keep the micro if it still belongs to the new macro, else take the first.
+          const keep = micros.includes(microSelect.value) ? microSelect.value : micros[0];
+          microSelect.innerHTML = micros.map(m =>
+            `<option value="${escapeHtml(m)}"${m === keep ? ' selected' : ''}>${escapeHtml(m)}</option>`
+          ).join('');
+        }
+
+        // Always send the pair: the server rejects a micro that doesn't fit its macro.
+        fetch('/api/data', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            id: Number(select.dataset.itemId),
+            macro_category: macro,
+            micro_category: microSelect ? microSelect.value : null
+          }),
+        }).then(res => {
+          if (!res.ok) alert('Could not save that category change.');
+        });
       });
 
       tableDiv.addEventListener('keydown', ev => {

@@ -1,6 +1,7 @@
 import os.path
 import sqlite3
 from helpers import get_datetime_from_slovak_dt
+from taxonomy import HOUSEHOLD_EQUIPMENT_MACRO, HOUSEHOLD_SUPPLIES_MACRO, LEGACY_HOUSEHOLD_SUPPLY_MICROS
 db_fp = 'receipts.db'
 schema_fp = 'receipts_schema.sql'
 
@@ -62,11 +63,31 @@ def ensure_llm_daily_usage_schema(conn):
         conn.commit()
 
 
+def ensure_household_taxonomy_rename(conn):
+    """Retag rows written when "Domácnosť" still meant consumables.
+
+    The macro was repurposed for durable household equipment (the thing we now
+    budget as an investment), and the consumables moved to a new macro. Filtering
+    on the old micro names makes this safe to run on every start: a genuine
+    equipment row can never carry one of them.
+    """
+    placeholders = ",".join(["?"] * len(LEGACY_HOUSEHOLD_SUPPLY_MICROS))
+    cur = conn.execute(
+        f"UPDATE item SET macro_category = ? "
+        f"WHERE macro_category = ? AND micro_category IN ({placeholders})",
+        (HOUSEHOLD_SUPPLIES_MACRO, HOUSEHOLD_EQUIPMENT_MACRO, *LEGACY_HOUSEHOLD_SUPPLY_MICROS),
+    )
+    if cur.rowcount:
+        print(f"Retagged {cur.rowcount} item(s) to {HOUSEHOLD_SUPPLIES_MACRO!r}")
+    conn.commit()
+
+
 class Database:
     # Disable same check thread to allow usage across multiple requests
     conn = sqlite3.connect(db_fp, check_same_thread=False)
     load_db_schema(conn, schema_fp)
     ensure_receipt_llm_elapsed_column(conn)
+    ensure_household_taxonomy_rename(conn)
 
     def __init__(self):
         # Unique cursor for every Database instance

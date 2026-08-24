@@ -1,167 +1,112 @@
-# CCA-F Prep Plan — Grocery / Financial Tracker
+# Household Category — Financial Tracker
 
-Using this codebase as a practice vehicle for the **Claude Certified Architect — Foundations** exam
-(60 questions / 120 min, pass 720/1000, proctored, closed-book). Target: ~mid-August 2026.
+Goal: see at a glance, every month, whether something went into the household — a lamp, a blender,
+a carpet. This is a **floor to reach, not a ceiling to stay under**. Everything previously in this
+file moved to [BACKLOG.md](BACKLOG.md).
 
-**Exam domains and weights:**
+Status: **implemented**. What follows is the shape of the change and how to check it.
 
-| Domain | Weight |
+---
+
+## The problem it solved
+
+`SLOVAK_TAXONOMY` had a macro called **"Domácnosť"**, but it meant *consumables* — cleaning
+products, paper towels, bags, candles. Durable goods had nowhere to go except
+`Ostatné → Nezaradené`. Macro → budget routing was a hardcoded SQL `CASE` in the Streamlit
+dashboard, and after a scan there was no way to correct an item's category at all.
+
+## What changed
+
+**Taxonomy** — moved out of `main.py` into a stdlib-only [`taxonomy.py`](taxonomy.py) at the repo
+root, so the Flask app and the out-of-process Streamlit tracker share one definition.
+
+- The consumables macro was renamed **"Drogéria a domáce potreby"** (still routed to `cosmetics`).
+- **"Domácnosť"** now means durable equipment: `Nábytok`, `Osvetlenie`, `Kuchynské spotrebiče`,
+  `Veľké spotrebiče`, `Riad a kuchynské potreby`, `Bytový textil a doplnky`,
+  `Náradie a železiarstvo`, `Záhrada a rastliny`, `Elektronika a domáca technika`.
+- `ensure_household_taxonomy_rename` in [`sqlite_db.py`](sqlite_db.py) retagged the 28 existing
+  rows. It filters on the old micro names, so it is permanently safe to re-run.
+- Both scan prompts gained an explicit consumable-vs-durable rule, and the shop whitelist grew
+  IKEA, Jysk, Möbelix, Alza, Datart, OBI and Hornbach — household receipts were all normalizing to
+  `"Unknown"`.
+
+**Routing is data now, not code** — a `category_mapping` table (`person_id`, `macro_category`,
+`category_id`) replaces the `CASE`. Unmapped macros still fall back to `groceries`. Editable under
+*Route Scanned Items to Budget Lines* on the Configuration page; the row list is driven by the
+taxonomy, so a macro added to `taxonomy.py` appears there automatically.
+
+**The Household line is a goal, not a cap** — `budget_categories.is_goal` inverts the bar: it fills
+as you spend (blue), turns green at 100%, and reads `64 € invested / 50 € goal` with a 🎯 next to
+the name. Seeded at €50, editable in the Configuration editor.
+
+**Per-item correction** — the `/items` grid gained Category and Subcategory dropdowns. The
+subcategory list follows the chosen macro, both fields save together, and the server rejects a
+micro that doesn't belong to its macro. The taxonomy is injected server-side rather than fetched,
+so nothing races the grid's first render, and the `change` listener is delegated on the table
+because grid.js re-renders on sort/search/paginate.
+
+## Fixes carried along
+
+- **Quantities were double-counted.** The rollup multiplied `i.price * COALESCE(i.amount, 1)`, but
+  `price` is already the line total written by `sqlite_db.save_receipt` — 4 yogurts at €2.12 counted
+  as €8.48. Across all history this inflated groceries by **€706 (~27%)**.
+- **A NULL `monthly_limit` crashed `/analytics`** via an unguarded `float(...)`. Such lines now
+  render as spend-only, no bar.
+- **`POST /api/data` and `/delete-row` trusted a client-supplied `item_id`**, so any logged-in user
+  could edit or delete another user's item by guessing. Both now resolve items through
+  `get_owned_item()` and 404 otherwise.
+- **Configuration page was not person-scoped**: it read every user's categories, wrote
+  `person_id = 1` on save, and its `DELETE ... WHERE id NOT IN (...)` would have wiped other users'
+  rows. All three now use the authenticated `user_id`.
+- **`uv run pytest tests/` was deleting the production database.** The fixture in
+  `tests/test_llm_quota.py` called `create_app()` and *then* set
+  `SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'` — but Flask-SQLAlchemy binds its engine during
+  `init_app`, so the override came too late and the fixture's `db.drop_all()` teardown emptied the
+  real `receipts.db`. (Hit during this work; restored from a backup.) The fixture now passes a
+  `TestConfig` *into* `create_app` and asserts it isn't pointed at `receipts.db`. `_ensure_sqlite_schema`
+  also skips `:memory:` and no-ops on a database with no `receipt` table — which is what the two
+  long-standing test errors actually were.
+- **`DB_PATH` was the relative `"../receipts.db"`**, one wrong working directory away from
+  migrating the stale 20 KB `financial_tracker/receipts.db`. It is now resolved absolutely from
+  `__file__` in [`financial_tracker/schema.py`](financial_tracker/schema.py), which also owns all
+  the tracker's `CREATE TABLE`s and the one-shot seeding.
+
+## Files
+
+| File | Change |
 |---|---|
-| Agentic Architecture & Orchestration | 27% |
-| Claude Code Configuration & Workflows | 20% |
-| Prompt Engineering | 20% |
-| Tool Design & MCP | 18% |
-| Context Management | 15% |
-
-**Ground rule for the next two weeks:** the exam is closed-book and conceptual. Building teaches
-intuition that multiple-choice questions reward, but it is not a substitute for studying. Budget
-roughly 60% reading/mock exams, 40% the tasks below. If time runs short, tasks are ordered so that
-stopping after Task 2 still covers the two heaviest domains.
-
----
-
-## Task 0 — Lock down `/analytics` (do first, not exam-related) ✅ Done
-
-Implemented via Caddy `forward_auth` gating `/analytics*` against a new Flask
-`/internal/verify-session` endpoint, which copies `X-Person-Id` upstream to Streamlit
-(replacing the hardcoded `person_id = 1` in all three Streamlit pages). Fixed one bug
-along the way: Werkzeug's dev server 400'd on the WebSocket `Upgrade`/`Connection`
-headers Caddy forwarded into the auth sub-request — resolved by clearing those headers
-specifically on the `forward_auth` call.
-
-The Streamlit financial tracker is on a public Azure VM with an unauthenticated `/analytics`
-endpoint, and `get_current_user_id()` in [streamlit_app.py](financial_tracker/streamlit_app.py:52)
-assumes a single owner. This is a live exposure. It earns zero exam points — do it anyway, this
-week, and timebox it.
-
-- [x] Decide the auth approach (Streamlit native auth vs. reverse-proxy basic auth on the VM vs.
-      shared-secret query gate). Proxy-level is likely fastest and least code.
-- [x] Confirm nothing else on the VM is unintentionally listening (`ss -tlnp`, check the Flask app's
-      bind address too). — both Flask (:5000) and Streamlit (:8501) were already bound to 127.0.0.1
-      only, not 0.0.0.0; Caddy is the sole public entry point.
-- [x] Make `get_current_user_id()` derive from the authenticated session rather than returning a
-      hardcoded/implicit owner.
-- [x] Verify from a logged-out browser / incognito that `/analytics` refuses access.
-
-Multi-tenant onboarding (first-visit budget category setup) is deliberately **not** in scope here —
-it is a product feature, not a security fix, and it is not exam-relevant. Separate it out.
+| [`taxonomy.py`](taxonomy.py) *(new)* | Shared taxonomy, shop list, validation helpers |
+| [`financial_tracker/schema.py`](financial_tracker/schema.py) *(new)* | Connection, table creation, default mapping seed |
+| [`main.py`](main.py) | Imports the taxonomy; prompt rules; shop whitelist |
+| [`sqlite_db.py`](sqlite_db.py) | `ensure_household_taxonomy_rename` backfill |
+| [`g_tracker/item_table.py`](g_tracker/item_table.py) | Category fields, pair validation, ownership checks |
+| [`g_tracker/templates/item_table.html`](g_tracker/templates/item_table.html) | Dropdown columns, delegated change handler |
+| [`financial_tracker/streamlit_app.py`](financial_tracker/streamlit_app.py) | Mapping-driven rollup, count fix, goal bar |
+| [`financial_tracker/pages/1_Configuration.py`](financial_tracker/pages/1_Configuration.py) | `is_goal`, routing editor, person scoping |
+| [`g_tracker/__init__.py`](g_tracker/__init__.py) | Migrations skip `:memory:` / empty databases |
+| [`tests/test_llm_quota.py`](tests/test_llm_quota.py) | Fixture no longer binds to the real DB |
 
 ---
 
-## Task 1 — Rewrite Receipt Buddy as a real tool-use loop  *(27% + 18% + 15%)*
+## Verification
 
-**Highest exam value of anything in this repo.** `ai_financial_agent()` at
-[insight.py:240](g_tracker/insight.py:240) is not an agent: it runs one fixed SQL aggregate, renders
-the *entire* monthly × macro × micro breakdown into a markdown table in the system prompt, and makes
-a single Groq call. Every question pays for the whole dataset, and the model can never ask a
-question the one hardcoded query didn't anticipate.
+```bash
+# 1. Backfill ran and is idempotent (second run prints nothing, counts unchanged)
+uv run flask run --port=5000
+sqlite3 receipts.db "SELECT macro_category, COUNT(*) FROM item GROUP BY 1 ORDER BY 2 DESC"
 
-Converting it to a tool-use loop exercises the agentic loop (gather context → act → verify), tool
-design, and context management simultaneously.
+# 2. Dashboard — run from financial_tracker/ (or anywhere; DB_PATH is absolute now)
+cd financial_tracker && uv run streamlit run streamlit_app.py
+```
 
-- [ ] Define 3–4 **narrow** tools rather than one `run_sql` escape hatch. Candidate set:
-      `get_spending_by_category(start_date, end_date, macro_category=None)`,
-      `get_receipts(start_date, end_date, shop_name=None, limit=...)`,
-      `get_monthly_totals(months_back)`, `search_items(name_substring, limit)`.
-      Writing these schemas by hand is the point — do not skip to a generic query tool.
-- [ ] Enforce `person_id` scoping **inside** each tool implementation, taken from
-      `current_user`. It must never be a model-supplied parameter, or one user can read another's
-      data by asking nicely.
-- [ ] Implement the agentic loop: call → if `stop_reason` is tool use, execute, append the result,
-      call again → repeat under a hard iteration cap (5 is plenty here).
-- [ ] Cap tool result sizes (row limits, rounded currency) so a broad date range can't blow up the
-      context window. Note what you had to truncate — that instinct is the 15% domain.
-- [ ] Port to the Anthropic SDK. Currently this path is Groq/llama and the receipt path is Gemini
-      via OpenRouter; the exam tests Anthropic's API surface, so hands-on here pays off directly.
-      Keep the Groq version behind a config flag if cost matters.
-- [ ] Route it through the existing `INSIGHT_CHAT` quota in
-      [llm_quota.py](g_tracker/llm_quota.py) — one *conversation* should consume one unit, not one
-      unit per tool round-trip.
-- [ ] Write down, in a comment or here, how the token cost per question compares before vs. after.
+- `/items` — set a row to `Domácnosť → Osvetlenie` and reload; it sticks. Changing the macro
+  repopulates the subcategory list.
+- `/analytics` — the Household line shows 🎯, fills as you add household items, turns green at the
+  goal. Remap `Nápoje` to `cosmetics` on the Configuration page and watch the money move.
+- Scan a receipt containing a durable item and confirm the model files it under `Domácnosť`. If it
+  lands in `Ostatné`, tighten the prompt rule rather than adding keyword hacks.
+- `uv run pytest tests/` — 3 passed. Confirm `SELECT COUNT(*) FROM receipt` is unchanged before and
+  after: this suite used to wipe the real database, and the fixture assertion now guards it.
 
-**Study hook:** after building this, you should be able to explain *without notes* why narrow typed
-tools beat a generic SQL tool, and when prompt-stuffing is actually the better choice.
-
----
-
-## Task 2 — Verification pass on receipt extraction  *(27% agentic loop, "verify results")*
-
-Concrete bug backing this: `Receipt.total` at [main.py:291](main.py:291) is the **sum of items**,
-while the model's extracted `total_amount` is parsed into `ReceiptData` and then never compared
-against it. The prompt at [main.py:151](main.py:151) asks the model to self-check its own math —
-which is exactly the kind of unverified self-report the exam wants you to distrust.
-[IMPROVE_PROMPT.md](IMPROVE_PROMPT.md) already records both this idea and that the fast Qwen config
-mangles discounts (IMG_1709).
-
-- [ ] Add a programmatic check: `abs(sum(items) - total_amount) > 0.01` → mismatch.
-- [ ] On mismatch, re-prompt once with the discrepancy stated explicitly ("your items sum to X but
-      you reported total Y; look again for missed discount lines or multi-quantity rows") rather
-      than blindly retrying the same prompt.
-- [ ] If the second pass still disagrees, surface it to the user — this is where the
-      "Take a photo with less glare" message from IMPROVE_PROMPT.md belongs. Fail loudly instead of
-      silently persisting a wrong total.
-- [ ] Persist the mismatch delta so you can see how often pass 2 rescues pass 1.
-- [ ] Re-test against the known-bad receipts in `receipts/`, IMG_1709 included.
-
-**Study hook:** this is the difference between a model *claiming* it verified and a system that
-*checks*. Expect exam questions in this shape.
-
----
-
-## Task 3 — MCP server over the receipts DB  *(18%)*
-
-Reuse the tool implementations from Task 1 — same functions, different transport. Doing both is what
-teaches the distinction between a tool the app calls in a loop and a tool exposed over MCP.
-
-- [ ] Stand up a minimal MCP server exposing the read-only query tools.
-- [ ] Write real tool descriptions and JSON schemas by hand; note where an ambiguous description
-      causes the model to pick the wrong tool. That failure is the lesson.
-- [ ] Keep it read-only for now. A write tool would need an authorization story you don't have yet.
-- [ ] Connect it to Claude Code (or the desktop app) and ask questions about your actual spending.
-- [ ] Understand the transport options (stdio vs. HTTP) well enough to explain when each applies —
-      this shows up on the exam.
-
----
-
-## Task 4 — Multi-receipt upload, as a Claude Code workflow exercise  *(20%)*
-
-The feature itself carries little exam weight. Its value is as a **vehicle** for practicing the
-Claude Code Workflows domain, so run it deliberately rather than just asking for the feature.
-
-- [ ] Write a `CLAUDE.md` for this repo first. There is real context scattered across
-      [IMPROVEMENTS.md](IMPROVEMENTS.md), [notes.txt](notes.txt),
-      [notes_personal.md](notes_personal.md), and [CHANGES_APPLIED.md](CHANGES_APPLIED.md) that
-      should be consolidated where Claude will actually load it.
-- [ ] Use plan mode to design the batch flow before any code is written. Current flow assumes one
-      file and immediately redirects to the validation screen
-      ([receipts.py:206](g_tracker/receipts.py:206)) — batching needs a queue/review UI.
-- [ ] Try a subagent for an isolated slice and observe what context it lacks. Noticing what a fresh
-      agent *doesn't* know is the core intuition this domain tests.
-- [ ] Note where per-file failures should be isolated so one bad image doesn't fail the batch.
-- [ ] Afterwards, write 3–5 sentences on which workflow tools helped and which were overhead.
-      Honest negative results are more useful for the exam than a clean success story.
-
----
-
-## Explicitly deprioritized
-
-Not because they're bad ideas — because they carry ~0% exam weight and you have two weeks.
-
-- **Mobile-friendly UI / narrower tables.** Pure frontend. Revisit after the exam.
-- **General refactoring.** You already flagged "maybe not now." Agreed.
-- **Multi-tenant onboarding flow** (first-visit budget category setup). Real product value, no exam
-  overlap. Separate from the Task 0 security fix, which does need doing now.
-
----
-
-## Suggested sequencing
-
-| | Focus |
-|---|---|
-| **Week 1** | Task 0 (timeboxed), then Task 1. Study alongside: agentic loop patterns, tool design, context management. |
-| **Week 2** | Task 2, then Task 3 if time allows. Shift the balance toward mock exams as the date approaches. |
-| **If short on time** | Stop after Task 2. Tasks 1 + 2 cover the 27% and much of 18% + 15% — the heaviest material. |
-| **After the exam** | Task 4, mobile UI, onboarding, refactor. |
-
-Cross-check the domain weights against the official exam guide before relying on this ordering —
-they come from third-party write-ups, not Anthropic's own published outline.
+**Back up `receipts.db` before running anything destructive.** It is gitignored, so git will not
+save you.

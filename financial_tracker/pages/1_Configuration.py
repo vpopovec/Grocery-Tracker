@@ -11,44 +11,14 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from auth import get_current_user_id
-
-DB_PATH = "../receipts.db"
-
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+from schema import get_db_connection, init_schema, macro_categories, seed_defaults
 
 st.set_page_config(page_title="Configuration", layout="wide")
 st.title("⚙️ Budget Configuration")
 
 # Initialize extension tables seamlessly
 with get_db_connection() as conn:
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS budget_categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category_name TEXT UNIQUE NOT NULL,
-        is_personal BOOLEAN DEFAULT 0,
-        monthly_limit REAL NULL,
-        person_id integer NOT NULL DEFAULT 1,
-        FOREIGN KEY (person_id) REFERENCES person (person_id)
-    )""")
-    conn.execute("""
-    -- Table A: A single-row global settings configuration table
-    CREATE TABLE IF NOT EXISTS global_settings (
-        person_id INTEGER PRIMARY KEY,
-        paycheck_anchor_day INTEGER NOT NULL DEFAULT 10,
-        FOREIGN KEY (person_id) REFERENCES person (person_id)
-    )""")
-    conn.execute("""
-    -- Table B: Realized historical cycles (if you manually override a month)
-    CREATE TABLE IF NOT EXISTS paycheck_metadata (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        person_id INTEGER NOT NULL,
-        paycheck_date DATE NOT NULL UNIQUE, -- Year-Month tracking point
-        FOREIGN KEY (person_id) REFERENCES person (person_id)
-    )""")
-    conn.commit()
+    init_schema(conn)
 
 # # Paycheck Target Setup
 # st.subheader("📅 Set Paycheck Anchor Date")
@@ -89,14 +59,11 @@ st.header("💳 Paycheck & Budget Cycle Sync")
 
 user_id = get_current_user_id()
 
+with get_db_connection() as conn:
+    seed_defaults(conn, user_id)
+
 # 1. Fetch current anchor configuration from database
 with get_db_connection() as conn:
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS global_settings (
-            person_id INTEGER PRIMARY KEY,
-            paycheck_anchor_day INTEGER NOT NULL DEFAULT 10
-        );
-    """)
     row = conn.execute("SELECT paycheck_anchor_day FROM global_settings WHERE person_id = ?", (user_id,)).fetchone()
     current_anchor = row[0] if row else 10
 
@@ -148,13 +115,6 @@ with st.form("override_cycle"):
     
     if st.form_submit_button("Lock Cycle Ingress Date"):
         with get_db_connection() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS paycheck_metadata (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    person_id INTEGER NOT NULL,
-                    paycheck_date DATE NOT NULL UNIQUE
-                );
-            """)
             try:
                 conn.execute(
                     "INSERT INTO paycheck_metadata (person_id, paycheck_date) VALUES (?, ?)", 
@@ -168,13 +128,22 @@ with st.form("override_cycle"):
 st.markdown("---")
 
 # Categories Editor
-st.subheader("🏷️ Map Macro Categories & Personal Budgets")
-st.caption("Note: Ensure category names match exactly what Gemini outputs (e.g., 'groceries', 'cosmetics') or what you intend to track manually.")
+st.subheader("🏷️ Budget Lines")
+st.caption(
+    "One row per budget line. Tick **Monthly goal** for a line you want to spend *at least* "
+    "the limit on (household investment) instead of staying under it — its bar fills up as you "
+    "spend and turns green once the goal is met."
+)
 
 with get_db_connection() as conn:
-    df_cat = pd.read_sql_query("SELECT id, category_name, is_personal, monthly_limit FROM budget_categories", conn)
+    df_cat = pd.read_sql_query(
+        "SELECT id, category_name, is_personal, is_goal, monthly_limit "
+        "FROM budget_categories WHERE person_id = ? ORDER BY id",
+        conn, params=(user_id,),
+    )
 
-df_cat['is_personal'] = df_cat['is_personal'].astype(bool)
+df_cat['is_personal'] = df_cat['is_personal'].fillna(0).astype(bool)
+df_cat['is_goal'] = df_cat['is_goal'].fillna(0).astype(bool)
 
 edited_df = st.data_editor(
     df_cat,
@@ -183,7 +152,8 @@ edited_df = st.data_editor(
         "id": st.column_config.NumberColumn("ID", disabled=True),
         "category_name": st.column_config.TextColumn("Category Name (Lowercase recommended)", required=True),
         "is_personal": st.column_config.CheckboxColumn("Is Personal Budget?"),
-        "monthly_limit": st.column_config.NumberColumn("Monthly Limit (€)", min_value=0),
+        "is_goal": st.column_config.CheckboxColumn("Monthly goal?", help="Spend at least this much, rather than at most"),
+        "monthly_limit": st.column_config.NumberColumn("Monthly Limit / Goal (€)", min_value=0),
         "person_id": None  # <─── This completely hides the column from the UI while keeping it in the dataframe
     },
     key="editor"
@@ -192,21 +162,25 @@ edited_df = st.data_editor(
 if st.button("Save Changes"):
     # Convert bools back to integers safely
     edited_df['is_personal'] = edited_df['is_personal'].fillna(False).astype(int)
-    edited_df['person_id'] = 1
-    
+    edited_df['is_goal'] = edited_df['is_goal'].fillna(False).astype(int)
+
     with get_db_connection() as conn:
         # 1. Collect all valid IDs currently inside the Streamlit editor dataframe
         # (New rows won't have an ID or it will be NaN)
         valid_ids = edited_df['id'].dropna().astype(int).tolist()
-        
-        # 2. Delete any categories from the database that the user removed in the editor
+
+        # 2. Delete any categories from the database that the user removed in the editor.
+        #    Scoped to this person: the editor only ever showed their own rows, so an
+        #    unscoped NOT IN would take everyone else's categories with it.
         if valid_ids:
             placeholders = ",".join(["?"] * len(valid_ids))
-            conn.execute(f"DELETE FROM budget_categories WHERE id NOT IN ({placeholders})", valid_ids)
+            conn.execute(
+                f"DELETE FROM budget_categories WHERE person_id = ? AND id NOT IN ({placeholders})",
+                (user_id, *valid_ids),
+            )
         else:
-            # If the dataframe is completely empty, wipe the table
-            conn.execute("DELETE FROM budget_categories")
-            
+            conn.execute("DELETE FROM budget_categories WHERE person_id = ?", (user_id,))
+
         # 3. Step through rows and Upsert them individually
         for _, row in edited_df.iterrows():
             category_id = row.get('id')
@@ -217,18 +191,84 @@ if st.button("Save Changes"):
             if pd.isna(category_id):
                 # This is a brand new row added via the "+" button
                 conn.execute("""
-                    INSERT INTO budget_categories (category_name, is_personal, monthly_limit, person_id)
-                    VALUES (?, ?, ?, ?)
-                """, (row['category_name'], row['is_personal'], limit, row['person_id']))
+                    INSERT INTO budget_categories (category_name, is_personal, is_goal, monthly_limit, person_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (row['category_name'], row['is_personal'], row['is_goal'], limit, user_id))
             else:
                 # This is an existing row -> Update it!
                 conn.execute("""
                     UPDATE budget_categories 
-                    SET category_name = ?, is_personal = ?, monthly_limit = ?, person_id = ?
-                    WHERE id = ?
-                """, (row['category_name'], row['is_personal'], limit, row['person_id'], int(category_id)))
+                    SET category_name = ?, is_personal = ?, is_goal = ?, monthly_limit = ?
+                    WHERE id = ? AND person_id = ?
+                """, (row['category_name'], row['is_personal'], row['is_goal'], limit,
+                      int(category_id), user_id))
                 
         conn.commit()
         
     st.success("Configurations successfully updated!")
     st.rerun()
+
+st.markdown("---")
+
+# ─── MACRO → BUDGET ROUTING ───
+st.subheader("🧭 Route Scanned Items to Budget Lines")
+st.caption(
+    "Every scanned receipt item carries a macro category. This is where each macro lands on "
+    "the dashboard. Unmapped macros fall back to *groceries*."
+)
+
+with get_db_connection() as conn:
+    df_budget_names = pd.read_sql_query(
+        "SELECT id, category_name FROM budget_categories WHERE person_id = ? ORDER BY category_name",
+        conn, params=(user_id,),
+    )
+    df_map = pd.read_sql_query(
+        "SELECT macro_category, category_id FROM category_mapping WHERE person_id = ?",
+        conn, params=(user_id,),
+    )
+
+if df_budget_names.empty:
+    st.warning("Add at least one budget line above before routing macro categories.")
+else:
+    UNMAPPED = "— unmapped (groceries) —"
+    id_to_name = dict(zip(df_budget_names['id'], df_budget_names['category_name']))
+    name_to_id = {name: cat_id for cat_id, name in id_to_name.items()}
+    current = dict(zip(df_map['macro_category'], df_map['category_id']))
+
+    # Driven by the taxonomy, so a macro added in taxonomy.py shows up here automatically.
+    df_routing = pd.DataFrame({
+        "macro_category": macro_categories(),
+        "budget_line": [id_to_name.get(current.get(macro), UNMAPPED) for macro in macro_categories()],
+    })
+
+    edited_routing = st.data_editor(
+        df_routing,
+        hide_index=True,
+        column_config={
+            "macro_category": st.column_config.TextColumn("Item Macro Category", disabled=True),
+            "budget_line": st.column_config.SelectboxColumn(
+                "Counts Toward", options=[UNMAPPED] + list(name_to_id), required=True),
+        },
+        key="routing_editor",
+    )
+
+    if st.button("Save Routing"):
+        with get_db_connection() as conn:
+            for _, row in edited_routing.iterrows():
+                macro = row['macro_category']
+                category_id = name_to_id.get(row['budget_line'])
+                if category_id is None:
+                    conn.execute(
+                        "DELETE FROM category_mapping WHERE person_id = ? AND macro_category = ?",
+                        (user_id, macro),
+                    )
+                else:
+                    conn.execute("""
+                        INSERT INTO category_mapping (person_id, macro_category, category_id)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(person_id, macro_category)
+                        DO UPDATE SET category_id = excluded.category_id
+                    """, (user_id, macro, int(category_id)))
+            conn.commit()
+        st.success("Routing saved!")
+        st.rerun()

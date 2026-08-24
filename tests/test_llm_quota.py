@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from config import Config
 from g_tracker import create_app, db
 from g_tracker.llm_quota import (
     INSIGHT_CHAT,
@@ -13,20 +14,29 @@ from g_tracker.llm_quota import (
 from g_tracker.models import Person
 
 
+class TestConfig(Config):
+    """Must be passed *into* create_app.
+
+    Flask-SQLAlchemy binds its engine during init_app, so overriding
+    SQLALCHEMY_DATABASE_URI afterwards leaves the engine pointed at the real
+    receipts.db — and the db.drop_all() below then empties it.
+    """
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    LLM_SCANS_PER_USER_PER_DAY = 2
+    LLM_SCANS_GLOBAL_PER_DAY = 3
+    INSIGHT_AI_PER_USER_PER_DAY = 5
+    INSIGHT_AI_GLOBAL_PER_DAY = 10
+    SCAN_RATE_LIMIT = ''
+    ASK_AI_RATE_LIMIT = ''
+    RATELIMIT_ENABLED = False
+
+
 @pytest.fixture
 def app():
-    app = create_app()
-    app.config.update({
-        'TESTING': True,
-        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
-        'LLM_SCANS_PER_USER_PER_DAY': 2,
-        'LLM_SCANS_GLOBAL_PER_DAY': 3,
-        'INSIGHT_AI_PER_USER_PER_DAY': 5,
-        'INSIGHT_AI_GLOBAL_PER_DAY': 10,
-        'SCAN_RATE_LIMIT': '',
-        'ASK_AI_RATE_LIMIT': '',
-        'RATELIMIT_ENABLED': False,
-    })
+    app = create_app(TestConfig)
+    assert 'receipts.db' not in app.config['SQLALCHEMY_DATABASE_URI'], \
+        'refusing to run destructive tests against the real database'
     with app.app_context():
         db.create_all()
         yield app

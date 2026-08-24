@@ -17,15 +17,26 @@ def _ensure_sqlite_schema(app):
         u = make_url(app.config['SQLALCHEMY_DATABASE_URI'])
     except Exception:
         return
-    if u.drivername != 'sqlite' or not u.database:
+    if u.drivername != 'sqlite' or not u.database or u.database == ':memory:':
         return
     import sqlite3
-    from sqlite_db import ensure_llm_daily_usage_schema, ensure_receipt_llm_elapsed_column
+    from sqlite_db import (
+        ensure_household_taxonomy_rename,
+        ensure_llm_daily_usage_schema,
+        ensure_receipt_llm_elapsed_column,
+    )
 
     conn = sqlite3.connect(u.database)
     try:
+        # Fresh/empty database (tests, first run): db.create_all() builds it below,
+        # so there is nothing to migrate and ALTERing would raise "no such table".
+        if not conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='receipt'"
+        ).fetchone():
+            return
         ensure_receipt_llm_elapsed_column(conn)
         ensure_llm_daily_usage_schema(conn)
+        ensure_household_taxonomy_rename(conn)
     finally:
         conn.close()
 

@@ -7,6 +7,7 @@ import traceback
 import base64
 from config import Config
 from helpers import *
+from taxonomy import SHOP_NAMES, SLOVAK_TAXONOMY
 from sqlite_db import Database
 from person import Person
 from pydantic import BaseModel
@@ -24,74 +25,19 @@ f_name = 'lidl_bj11.jpeg'
 db = Database()
 client = genai.Client(api_key=Config.GEMINI_API_KEY)
 
+# Taxonomy now lives in taxonomy.py so the Streamlit tracker can import it too.
 # Makro = široká skupina, mikro = podkategória (iba hodnoty z tohto zoznamu).
-SLOVAK_TAXONOMY: dict[str, list[str]] = {
-    "Čerstvé potraviny": [
-        "Mliečne výrobky",
-        "Pečivo a pekárenské výrobky",
-        "Mäso a hydina",
-        "Údeniny a salámy",
-        "Ryby a morské plody",
-        "Ovocie",
-        "Zelenina",
-        "Vajcia",
-    ],
-    "Trvanlivé potraviny": [
-        "Cestoviny, ryža a obilniny",
-        "Konzervované a pohotové jedlá",
-        "Oleje, octy a dressingy",
-        "Omáčky, dochucovadlá a koreniny",
-        "Sladkosti a cukrovinky",
-        "Snackové pochutiny a chipsy",
-        "Cereálie a müsli",
-        "Džemy, med a nátierky",
-        "Prísady na pečenie",
-        "Bezmäsité a rastlinné alternatívy",
-    ],
-    "Nápoje": [
-        "Vody a minerálky",
-        "Nealkoholické nápoje",
-        "Šťavy a nektáry",
-        "Káva",
-        "Čaj",
-        "Pivo",
-        "Víno",
-        "Liehoviny a destiláty",
-    ],
-    "Mrazené potraviny": [
-        "Mrazená zelenina a ovocie",
-        "Mrazené polotovary a jedlá",
-        "Zmrzlina a mrazené dezerty",
-    ],
-    "Domácnosť": [
-        "Čistiace prostriedky",
-        "Papierové výrobky a utierky",
-        "Sáčky, fólie a obaly",
-        "Sviečky a zápalky",
-    ],
-    "Osobná hygiena a kozmetika": [
-        "Starostlivosť o telo",
-        "Starostlivosť o vlasy",
-        "Ústna hygiena",
-        "Kozmetika a parfuméria",
-    ],
-    "Zdravie a drogéria": [
-        "Vitamíny a doplnky výživy",
-        "Lieky bez predpisu (OTC)",
-        "Hygienické potreby",
-    ],
-    "Pre zvieratá": [
-        "Krmivo",
-        "Pamlsky a doplnky pre zvieratá",
-    ],
-    "Ostatné": [
-        "Nezaradené",
-        "Textil a oblečenie",
-        "Sezónne a darčekové",
-    ],
-}
 
 slovak_taxonomy = json.dumps(SLOVAK_TAXONOMY, ensure_ascii=False, indent=2)
+shop_names = json.dumps(SHOP_NAMES, ensure_ascii=False)
+
+# "Domácnosť" and "Drogéria a domáce potreby" are easy to confuse: one is the monthly
+# consumables run, the other is what we actually want to track as an investment.
+HOUSEHOLD_RULE = (
+    'Durable household goods (furniture, lamps, appliances, kitchenware, carpets and home '
+    'textiles, tools, plants) belong to macro "Domácnosť". Consumables you use up — cleaning '
+    'products, paper towels, bags, candles — belong to "Drogéria a domáce potreby".'
+)
 
 
 def main():
@@ -145,9 +91,10 @@ Ensure 100% mathematical consistency and follow the taxonomy rules strictly.
    - Do NOT create separate "item" entries for discounts unless they are general "Zľava na nákup" (Total bill discount).
 2. **Categories**:
    - For every item, assign a `macro_category` and `micro_category` based ONLY on the provided taxonomy.
+   - {HOUSEHOLD_RULE}
    - Taxonomy: {slovak_taxonomy}
 3. **Shop Names**:
-   - Normalize `shop_name` to exactly one of: ["Lidl", "Kaufland", "Tesco", "Billa", "Coop Jednota", "Metro", "Yeme", "dm drogerie markt", "Unknown"].
+   - Normalize `shop_name` to exactly one of: {shop_names}.
 4. **Math Verification**:
    - STEP 1: Sum all extracted item `total_price` values.
    - STEP 2: Compare to the extracted `total_amount`.
@@ -224,7 +171,8 @@ def scan_receipt_with_google(f_name: str):
     prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format.
     If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
     For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
-```{slovak_taxonomy}```. Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```["Lidl","Kaufland","Tesco","Billa","Coop Jednota","Metro","Yeme","dm drogerie markt","Unknown"]```.
+```{slovak_taxonomy}```. {HOUSEHOLD_RULE}
+    Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```{shop_names}```.
     There can be two standalone "items" represnting discount for one item. 
     Make sure the sum of individual prices is equal to the total price!!!"""
 
