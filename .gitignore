@@ -11,6 +11,7 @@ ENV/
 
 # Database
 receipts.db
+*.db.bak-*
 *.db
 *.sqlite
 *.sqlite3

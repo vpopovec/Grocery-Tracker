@@ -48,6 +48,19 @@ the grid with its own delete button, so the deep link lands on the receipt you c
 Selecting a row in either view opens an action panel: delete-with-confirmation for a manual expense,
 a link to the Receipt Manager for a scanned one.
 
+### `item.receipt_id` foreign key pointed at a non-existent table ✅
+
+[receipts_schema.sql:22](receipts_schema.sql:22) declared `REFERENCES receipts (receipt_id)` —
+plural, a table that has never existed. Under `PRAGMA foreign_keys = ON` (which
+`financial_tracker/schema.py` sets on every connection) any delete touching `item` died with
+`no such table: main.receipts`. Nothing hit it because Flask/SQLAlchemy runs with FKs *off* and
+Streamlit had never deleted anything. `models.py` already had it right; only the raw DDL was wrong.
+
+Fixed in the schema file and migrated in the live DB by rebuilding the table (SQLite cannot `ALTER`
+a constraint), dropping and restoring the `remove_items` trigger around the swap, which otherwise
+blocks the drop. 1833 rows / €3378.61 identical before and after; `integrity_check` ok. Backup at
+`receipts.db.bak-20260826-000209`.
+
 ### Household category ✅
 
 Macro/micro editing on `/items`, a data-driven `category_mapping` table replacing the hardcoded
@@ -120,6 +133,13 @@ UI instead, persisted per person and injected into the prompt at scan time.
 
 ## Deferred
 
+- **16 orphaned `scan` rows** point at receipts that no longer exist, with their image files still
+  in `receipts/`. Not from deletes — `receipt` carries
+  `UNIQUE(person_id, shop_name, shopping_date, total) ON CONFLICT REPLACE`, so re-scanning the same
+  receipt replaces the row under a new `receipt_id` and strands the old scan (the "not on replace,
+  leider" comment on [models.py:18](g_tracker/models.py:18) is about this). `PRAGMA foreign_key_check`
+  lists them. Decide whether the fix is cleaning them up, an `ON DELETE CASCADE`, or dropping the
+  REPLACE behaviour — each also has to say what happens to the image file.
 - **Mobile-friendly UI / narrower tables.** The `/items` grid now carries two more columns; the
   category dropdowns are capped at `11rem` but the table is still wide on a phone.
 - **General refactoring.**

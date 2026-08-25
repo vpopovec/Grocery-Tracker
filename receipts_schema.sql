@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS item (
     macro_category text NOT NULL,
     micro_category text NOT NULL,
     receipt_id integer,
-	FOREIGN KEY (receipt_id) REFERENCES receipts (receipt_id)
+	FOREIGN KEY (receipt_id) REFERENCES receipt (receipt_id)
 );
 
 -- persons table
