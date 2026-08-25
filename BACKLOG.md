@@ -18,6 +18,36 @@ into the auth sub-request — resolved by clearing those headers specifically on
 call. Verified from a logged-out browser. Flask (:5000) and Streamlit (:8501) were already bound
 to 127.0.0.1 only; Caddy is the sole public entry point.
 
+### Item-level transaction lookup ✅
+
+`2_Transaction_Browser.py` now carries a **By receipt / By item** toggle. The item view lists every
+scanned line with its own date, shop, macro, micro, budget line and price, unions in manual expenses
+as single rows (so totals match the dashboard, which counts both sources), and filters by budget
+line — plus macro, with the micro dropdown narrowing to the chosen macro. Date range defaults to the
+active cycle with presets out to all-time.
+
+The arbitrary-category bug is gone: the old query selected `i.macro_category` while grouping by
+receipt, so SQLite picked one item's category for the whole trip. A receipt spanning several budget
+lines now reads **Mixed**, and filtering by a line matches any receipt *containing* it, so a mixed
+Kaufland trip still surfaces under household instead of vanishing.
+
+Cycle helpers moved out of `streamlit_app.py` into `financial_tracker/cycle.py` — importing that
+module to get the cycle would have re-run the entire dashboard UI. Verified every budget line's
+item-view total against `get_budget_status()` for the current cycle: all reconcile.
+
+### Delete transactions from the ledger ✅
+
+Split by ownership. **Manual expenses** are deleted in Streamlit (owner-scoped
+`DELETE ... WHERE expense_id = ? AND person_id = ?`) — Streamlit is the only writer of
+`manual_expenses`, so there is nothing else to clean up. **Scanned receipts** are not deleted from
+Streamlit: a receipt is items *plus* a `scan` row *plus* an image on disk *plus* the `RECEIPT_ID`
+focus pointer, and `item_table.delete_receipt` is the only place that knows all four. The ledger
+links out instead — `/receipts?focus=<id>` (new, owner-scoped) pulls that receipt into a card above
+the grid with its own delete button, so the deep link lands on the receipt you clicked.
+
+Selecting a row in either view opens an action panel: delete-with-confirmation for a manual expense,
+a link to the Receipt Manager for a scanned one.
+
 ### Household category ✅
 
 Macro/micro editing on `/items`, a data-driven `category_mapping` table replacing the hardcoded
@@ -77,30 +107,6 @@ Reuse the tool implementations from the tool-use loop above — same functions, 
 The current flow assumes one file and immediately redirects to the validation screen
 ([receipts.py:206](g_tracker/receipts.py:206)); batching needs a queue/review UI. Isolate per-file
 failures so one bad image doesn't fail the batch. Pairs naturally with the quick-upload nav below.
-
-### Item-level transaction lookup
-
-Answer questions like *"what did I actually buy for the household this month?"* — today nothing
-can. The Transaction Browser
-([2_Transaction_Browser.py](financial_tracker/pages/2_Transaction_Browser.py)) aggregates one row
-per shopping trip: item names are flattened into a `GROUP_CONCAT` "Details" string, and the row's
-`Category` is `COALESCE(LOWER(i.macro_category), 'groceries')` — whichever item SQLite happened to
-pick out of the group, which is arbitrary and often wrong for a mixed receipt.
-
-So a €63 IKEA trip shows as one row, and filtering by category can't reach the individual lamp or
-carpet inside a mixed Kaufland receipt.
-
-- Add an item-level view (or a toggle on the existing one) that lists individual items with their
-  date, shop, macro/micro category and price, instead of one row per receipt.
-- Filter by macro *and* micro, and by budget line via `category_mapping` — "show me everything
-  routed to household in this cycle" is the driving question.
-- Default the date range to the current budget cycle (`get_current_cycle_start` in
-  [streamlit_app.py](financial_tracker/streamlit_app.py)) so it lines up with what the dashboard
-  bar is showing; make it easy to widen to "last 6 months" for a trend.
-- Show the running total for the current filter, so clicking through from the Household goal bar
-  reconciles against the number on the dashboard.
-- Drop the arbitrary-category bug above while you are in there: a receipt spanning several macros
-  should not claim a single one.
 
 ### Register a new shop
 

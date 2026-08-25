@@ -20,3 +20,19 @@ def get_current_user_id():
 
     st.error("Not authenticated. Please log in via the main app first.")
     st.stop()
+
+
+def flask_base_url():
+    """Base URL for links from Streamlit back into the Flask app.
+
+    Behind Caddy the two share an origin (Flask at /, Streamlit under /analytics), so
+    a root-relative link is correct. Running `streamlit run` standalone there is no
+    Flask on :8501 — a root-relative link just hits Streamlit's own 404 — so point at
+    the Flask dev server instead. GROCERY_APP_BASE_URL overrides both.
+    """
+    explicit = os.environ.get("GROCERY_APP_BASE_URL")
+    if explicit is not None:
+        return explicit.rstrip("/")
+
+    behind_proxy = st.context.headers.get("X-Person-Id") is not None
+    return "" if behind_proxy else "http://localhost:5000"

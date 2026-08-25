@@ -42,7 +42,34 @@ def receipts():
                 print(f'ROW: {row._fields}')
             except:
                 print(f'ERROR: {traceback.format_exc()}')
-        return render_template('receipt_table.html', receipts_persons=receipts_persons)
+        return render_template(
+            'receipt_table.html',
+            receipts_persons=receipts_persons,
+            focus_receipt=get_focus_receipt(),
+        )
+
+
+def get_focus_receipt():
+    """The receipt named by ?focus=<id>, for deep links out of the Streamlit ledger.
+
+    Streamlit deliberately does not delete receipts itself: a receipt is items *plus*
+    scan rows *plus* the uploaded image on disk, and delete_receipt() below is the only
+    place that knows all three. The ledger links here instead, and this pulls the row
+    forward so you land on the receipt you clicked rather than hunting for it.
+
+    Owner-scoped: receipt_id is a guessable integer supplied by the client.
+    """
+    focus_id = request.args.get('focus', type=int)
+    if not focus_id:
+        return None
+    person_id = int(current_user.get_id())
+    row = db.session.execute(
+        select(Receipt).where(
+            Receipt.receipt_id == focus_id,
+            Receipt.person_id == person_id,
+        )
+    ).first()
+    return row[0] if row else None
 
 
 @bp.route('/add-row')

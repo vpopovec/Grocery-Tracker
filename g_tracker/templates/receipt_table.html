@@ -8,6 +8,26 @@
   <div>
     <h1>Receipts</h1>
     <hr>
+    {% if focus_receipt %}
+      {# Deep-linked from the Streamlit ledger, so the receipt you clicked is right here. #}
+      <div class="card mb-3 border-danger">
+        <div class="card-body">
+          <h5 class="card-title">{{ focus_receipt.shop_name }}</h5>
+          <p class="card-text mb-2">
+            {{ focus_receipt.shopping_date.strftime('%Y/%m/%d') }} &middot;
+            {{ "%.2f"|format(focus_receipt.total) }} &euro; &middot;
+            {{ focus_receipt.items|length }} item{{ '' if focus_receipt.items|length == 1 else 's' }}
+          </p>
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{{ url_for('item_table.items', receipt_id=focus_receipt.receipt_id) }}">Show items</a>
+          <form method="post" action="{{ url_for('item_table.delete_receipt') }}" style="display:inline"
+                onsubmit="return confirm('Delete this receipt, its items and its scanned image?');">
+            <input type="hidden" name="receipt_id" value="{{ focus_receipt.receipt_id }}" />
+            <button type="submit" class="btn btn-sm btn-danger">Delete this receipt</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
     <div id="table"></div>
   </div>
   <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>

@@ -11,6 +11,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from auth import get_current_user_id
+from cycle import calculate_active_cycle
 from schema import get_db_connection, init_schema, macro_categories, seed_defaults
 
 st.set_page_config(page_title="Configuration", layout="wide")
@@ -35,24 +36,6 @@ with get_db_connection() as conn:
 #         st.success("Anchor updated!")
 #         st.rerun()
 
-
-
-def calculate_active_cycle(anchor_day=10):
-    """
-    Determines the start and end dates of the current cycle based on today's date.
-    """
-    today = date.today()
-    
-    # If we haven't reached the anchor day yet this month, 
-    # our budget cycle started in the previous calendar month.
-    if today.day < anchor_day:
-        start_date = today - relativedelta(months=1)
-        start_date = start_date.replace(day=anchor_day)
-    else:
-        start_date = today.replace(day=anchor_day)
-        
-    end_date = start_date + relativedelta(months=1) - relativedelta(days=1)
-    return start_date, end_date
 
 
 st.header("💳 Paycheck & Budget Cycle Sync")
