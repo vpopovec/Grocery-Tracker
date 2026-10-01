@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Register shop
+{% endblock %}
+
+{% block main %}
+    <div class="mb-3 mx-auto" style="max-width: 28rem;">
+        <div class="mb-3" id="welcome-title">
+            Shop wasn't recognized
+        </div>
+        <p class="text-muted">
+            Register a name for this receipt. It will be used on this receipt and
+            offered to the scanner next time.
+        </p>
+        <form method="post" novalidate>
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.shop_name.label }}<br>
+                {{ form.shop_name(size=40, class_="form-control mx-auto", autofocus=true) }}
+                {% for error in form.shop_name.errors %}
+                <span style="color: red;">[{{ error }}]</span>
+                {% endfor %}
+            </div>
+            <p>
+                {{ form.submit(class_="btn btn-outline-secondary") }}
+                {{ form.skip(class_="btn btn-link") }}
+            </p>
+        </form>
+    </div>
+{% endblock %}
