@@ -29,7 +29,6 @@ client = genai.Client(api_key=Config.GEMINI_API_KEY)
 # Makro = široká skupina, mikro = podkategória (iba hodnoty z tohto zoznamu).
 
 slovak_taxonomy = json.dumps(SLOVAK_TAXONOMY, ensure_ascii=False, indent=2)
-shop_names = json.dumps(SHOP_NAMES, ensure_ascii=False)
 
 # "Domácnosť" and "Drogéria a domáce potreby" are easy to confuse: one is the monthly
 # consumables run, the other is what we actually want to track as an investment.
@@ -66,16 +65,23 @@ class ReceiptItem(BaseModel):
 
 class ReceiptData(BaseModel):
     shop_name: str
+    shop_name_guess: str = ""
     date: str
     items: list[ReceiptItem]
     total_amount: float
 
 
-def scan_receipt_with_openrouter(f_name: str):
+def _shop_names_json(allowed_shops=None) -> str:
+    names = list(allowed_shops) if allowed_shops is not None else SHOP_NAMES
+    return json.dumps(names, ensure_ascii=False)
+
+
+def scan_receipt_with_openrouter(f_name: str, allowed_shops=None):
     # Load the receipt image
     with open(f_name, "rb") as f:
         image_bytes = f.read()
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    shops_json = _shop_names_json(allowed_shops)
 
     prompt_xml = f"""### ROLE
 You are a precise Slovak financial data extraction expert.
@@ -94,7 +100,9 @@ Ensure 100% mathematical consistency and follow the taxonomy rules strictly.
    - {HOUSEHOLD_RULE}
    - Taxonomy: {slovak_taxonomy}
 3. **Shop Names**:
-   - Normalize `shop_name` to exactly one of: {shop_names}.
+   - Normalize `shop_name` to exactly one of: {shops_json}.
+   - If none match, set `shop_name` to "Unknown" and set `shop_name_guess` to the shop name as printed on the receipt (best readable guess).
+   - If `shop_name` is not "Unknown", set `shop_name_guess` to an empty string.
 4. **Math Verification**:
    - STEP 1: Sum all extracted item `total_price` values.
    - STEP 2: Compare to the extracted `total_amount`.
@@ -104,6 +112,7 @@ Ensure 100% mathematical consistency and follow the taxonomy rules strictly.
 Output only a JSON object matching this structure:
 {{
     "shop_name": string,
+    "shop_name_guess": string,
     "date": "YYYY-MM-DD",
     "items": [
         {{
@@ -162,17 +171,19 @@ Output only a JSON object matching this structure:
     return response, llm_elapsed_seconds, status_message
 
 
-def scan_receipt_with_google(f_name: str):
+def scan_receipt_with_google(f_name: str, allowed_shops=None):
     # Load the receipt image
     with open(f_name, "rb") as f:
         image_bytes = f.read()
 
+    shops_json = _shop_names_json(allowed_shops)
     # leads to errors: If an individual item is a discount (negative final_price), then subtract this price from the item above if possible (item price will stay positive), otherwise keep the discount as separate item.
     prompt = f"""Extract all items, the shop name, date, and total amount from this Slovak receipt. Use the provided JSON schema and ISO date format.
     If an individual item is a discount (negative price) linked to the item above, join the discount by adding the discount price to the item price. Otherwise, keep the discount as separate item.
     For each item, set macro_category to one of the top-level keys and micro_category to exactly one value from that key's list (Slovak labels as given):
 ```{slovak_taxonomy}```. {HOUSEHOLD_RULE}
-    Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```{shop_names}```.
+    Allowed shop_name values (use exactly this string, or "Unknown" if none match): ```{shops_json}```.
+    If shop_name is "Unknown", set shop_name_guess to the shop name as printed on the receipt; otherwise set shop_name_guess to "".
     There can be two standalone "items" represnting discount for one item. 
     Make sure the sum of individual prices is equal to the total price!!!"""
 
@@ -215,8 +226,9 @@ def scan_receipt_with_google(f_name: str):
 
 class Receipt:
 
-    def __init__(self, f_name):
+    def __init__(self, f_name, allowed_shops=None):
         self.f_name = f_name
+        self.shop_guess = ""
         print(f"Receipt.f_name = {f_name}")
         # TODO: Check why we use cached receipt, if we are using Gemini OCR
         # Check if raw_items are stored in cache
@@ -224,13 +236,19 @@ class Receipt:
         # if not cached:
             # cache_receipt(self.raw_items, f_name)
 
-        # self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_google(f_name)
-        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_openrouter(f_name)
+        # self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_google(f_name, allowed_shops)
+        self.receipt_info, self.llm_elapsed_seconds, self.status_message = scan_receipt_with_openrouter(
+            f_name, allowed_shops)
 
         if self.receipt_info:
-            self.shop = self.receipt_info['shop_name']
-            self.shopping_date = self.receipt_info['date']
-            print(f"GOT SHOP: {self.shop=}")
+            info = self.receipt_info
+            if hasattr(info, "model_dump"):
+                info = info.model_dump()
+                self.receipt_info = info
+            self.shop = info['shop_name']
+            self.shop_guess = (info.get('shop_name_guess') or "").strip()
+            self.shopping_date = info['date']
+            print(f"GOT SHOP: {self.shop=} guess={self.shop_guess!r}")
             print(f'DATE OF SHOPPING {self.shopping_date=}')
             self.grocery_list = []
 
@@ -283,8 +301,8 @@ class Receipt:
                 print(f"ERROR: {res_code=}")
 
 
-def process_receipt_from_fpath(f_name: str) -> Receipt:
-    receipt = Receipt(f_name)
+def process_receipt_from_fpath(f_name: str, allowed_shops=None) -> Receipt:
+    receipt = Receipt(f_name, allowed_shops=allowed_shops)
     if receipt.status_message != 'success':
         return None, receipt.status_message
 

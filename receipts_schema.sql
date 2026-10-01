@@ -54,6 +54,15 @@ CREATE TABLE IF NOT EXISTS scan (
     FOREIGN KEY (receipt_id) REFERENCES receipt (receipt_id)
 );
 
+-- per-user custom shops (defaults live in taxonomy.SHOP_NAMES)
+CREATE TABLE IF NOT EXISTS person_shop (
+    id integer PRIMARY KEY,
+    person_id integer NOT NULL,
+    shop_name text NOT NULL,
+    FOREIGN KEY (person_id) REFERENCES person (person_id),
+    UNIQUE (person_id, shop_name)
+);
+
 -- this deletes items only on explicit DELETE, not on REPLACE...
 CREATE TRIGGER IF NOT EXISTS remove_items AFTER DELETE ON receipt
 BEGIN

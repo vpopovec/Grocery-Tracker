@@ -118,3 +118,19 @@ class LlmDailyUsage(db.Model):
         db.UniqueConstraint(
             'person_id', 'usage_date', 'usage_kind', name='_person_usage_kind_date_uc'),
     )
+
+
+class PersonShop(db.Model):
+    """User-registered shop names, injected into the scan prompt with SHOP_NAMES."""
+
+    __tablename__ = 'person_shop'
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.person_id'), nullable=False)
+    shop_name = db.Column(db.Text, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('person_id', 'shop_name', name='_person_shop_name_uc'),
+    )
+
+    def __repr__(self):
+        return f"<PersonShop {self.shop_name!r} for person {self.person_id}>"

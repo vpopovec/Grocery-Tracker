@@ -23,6 +23,7 @@ def _ensure_sqlite_schema(app):
     from sqlite_db import (
         ensure_household_taxonomy_rename,
         ensure_llm_daily_usage_schema,
+        ensure_person_shop_schema,
         ensure_receipt_llm_elapsed_column,
     )
 
@@ -37,6 +38,7 @@ def _ensure_sqlite_schema(app):
         ensure_receipt_llm_elapsed_column(conn)
         ensure_llm_daily_usage_schema(conn)
         ensure_household_taxonomy_rename(conn)
+        ensure_person_shop_schema(conn)
     finally:
         conn.close()
 

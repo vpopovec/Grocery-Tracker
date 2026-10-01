@@ -43,3 +43,9 @@ class ResetPasswordForm(FlaskForm):
     password2 = PasswordField(
         'Repeat password', validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField('Set new password')
+
+
+class RegisterShopForm(FlaskForm):
+    shop_name = StringField('Shop name')
+    submit = SubmitField('Register shop')
+    skip = SubmitField('Keep as Unknown')

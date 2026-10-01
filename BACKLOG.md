@@ -121,13 +121,13 @@ The current flow assumes one file and immediately redirects to the validation sc
 ([receipts.py:206](g_tracker/receipts.py:206)); batching needs a queue/review UI. Isolate per-file
 failures so one bad image doesn't fail the batch. Pairs naturally with the quick-upload nav below.
 
-### Register a new shop
+### Register a new shop — done
 
-`shop_name` is normalized against a fixed whitelist that lives in the model prompt
-([taxonomy.py](taxonomy.py) `SHOP_NAMES`, injected into both prompts in [main.py](main.py)).
-Anything not on the list becomes `"Unknown"`. Household equipment made this concrete — IKEA, Jysk,
-Möbelix, Alza, Datart, OBI and Hornbach had to be added by hand. Let the user add a shop from the
-UI instead, persisted per person and injected into the prompt at scan time.
+Per-user `person_shop` rows plus defaults from `SHOP_NAMES`. After a scan lands as
+`Unknown`, `/scan/register-shop/<id>` prompts with the LLM `shop_name_guess` prefilled.
+Confirmed names are normalized (case-insensitive dedupe), saved for that person, applied
+to the current receipt only, and injected into the next scan prompt.
+
 
 ---
 

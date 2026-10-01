@@ -20,6 +20,22 @@ def ensure_receipt_llm_elapsed_column(conn):
         conn.commit()
 
 
+def ensure_person_shop_schema(conn):
+    """Create person_shop for databases that predate per-user custom shops."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS person_shop (
+            id INTEGER PRIMARY KEY,
+            person_id INTEGER NOT NULL,
+            shop_name TEXT NOT NULL,
+            FOREIGN KEY (person_id) REFERENCES person (person_id),
+            UNIQUE (person_id, shop_name)
+        )
+        """
+    )
+    conn.commit()
+
+
 def ensure_llm_daily_usage_schema(conn):
     """Migrate llm_daily_usage from legacy scan_count schema to usage_count + usage_kind."""
     if not conn.execute(
@@ -88,6 +104,7 @@ class Database:
     load_db_schema(conn, schema_fp)
     ensure_receipt_llm_elapsed_column(conn)
     ensure_household_taxonomy_rename(conn)
+    ensure_person_shop_schema(conn)
 
     def __init__(self):
         # Unique cursor for every Database instance
